@@ -1,5 +1,5 @@
 import numpy as np
-from torch.optim import SGD, Adam
+from optimizers import SGD, Adam
 from abstracts import OOOptimizer, BestSolution, GradBuffer
 
 """=======================================  SIMPLE ES  ======================================="""
