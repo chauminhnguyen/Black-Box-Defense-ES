@@ -1,5 +1,8 @@
 import argparse, os, gym, ray
 import numpy as np
+from strategies_v4 import GES
+from workers import Worker
+from policies import LinearPolicy
 
 class RLController(object):
     def __init__(self):
