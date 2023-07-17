@@ -554,9 +554,9 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 opt.zero_grad()
                 loss.backward()
             '''
-            def loss_fn(weight, criterion, inputs, targets):
+            def loss_fn(weight, model, criterion, inputs, targets):
                 with torch.no_grad():
-                    for p in denoiser.parameters():
+                    for p in model.parameters():
                         p.copy_(weight)
 
                 # augment inputs with noise

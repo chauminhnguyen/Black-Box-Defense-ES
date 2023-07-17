@@ -5,8 +5,9 @@ import time
 import torch
 
 class GES:
-    def __init__(self, loader, criterion):
+    def __init__(self, loader, model, criterion):
         self.loader = loader
+        self.model = model
         self.criterion = criterion
     
     # Guided-ES framework to estimate gradients
@@ -26,8 +27,8 @@ class GES:
             else:
                 noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
             noise = noise.reshape(x.shape)
-            grad += noise * (loss_fn(x + noise, self.criterion, inputs, targets) - \
-                             loss_fn(x - noise, self.criterion, inputs, targets))
+            grad += noise * (loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
+                             loss_fn(x - noise, self.model, self.criterion, inputs, targets))
         return grad / (2 * pop_size * sigma ** 2)
 
     def ges(self, x_init, loss_fn, lr=0.2, sigma=0.01, k=1, pop_size=1, max_samples=int(1e5)):
@@ -49,7 +50,9 @@ class GES:
                 # surg_grads.append(sg)
             errors.append(np.dot(2*x, g_hat)/(np.linalg.norm(2*x) * np.linalg.norm(g_hat)))
             x -= lr * g_hat
-
+            with torch.no_grad():
+                for p in self.model.parameters():
+                    p.copy_(torch.from_numpy(x))
 
             xs.append(2*pop_size)
             ys.append(loss_fn(x))
