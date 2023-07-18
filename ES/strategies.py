@@ -4,6 +4,7 @@ from copy import deepcopy
 import time
 import torch
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
+from tqdm import tqdm
 
 class GES:
     def __init__(self, loader, model, criterion):
@@ -19,7 +20,7 @@ class GES:
         c = sigma * np.sqrt((1 - alpha) / k)
         grad = 0
         # for i in range(pop_size):
-        for i, (inputs, targets) in enumerate(self.loader):
+        for i, (inputs, targets) in tqdm(enumerate(self.loader)):
             inputs = inputs.cuda()
             targets = targets.cuda()
 
