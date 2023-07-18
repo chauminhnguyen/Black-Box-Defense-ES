@@ -34,9 +34,11 @@ class GES:
             # The loss_fn returns the output with the shape equals to the batch size, yet the noise has the shape of 1 * len(x)
             # torch.Size([256]) torch.Size([256]) f(x+noise) f(x-noise) torch.Size([256])
             # torch.Size([558400]) noise.shape
-
-            grad += noise * (loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
-                             loss_fn(x - noise, self.model, self.criterion, inputs, targets))
+            
+            antithetic = loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
+                         loss_fn(x - noise, self.model, self.criterion, inputs, targets)
+            g = antithetic.unsqueeze(1) * noise.unsqueeze(0).sum(axis=0)
+            grad += g
         return grad / (2 * pop_size * sigma ** 2)
 
     def ges(self, x_init, loss_fn, lr=0.2, sigma=0.01, k=1, pop_size=1, max_samples=int(1e5)):
