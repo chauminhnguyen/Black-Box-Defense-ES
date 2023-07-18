@@ -41,10 +41,10 @@ parser.add_argument('--measurement', default=576, type=int, metavar='N', help='t
 # Optimization Method
 parser.add_argument('--optimization_method', default='FO', type=str,
                     help="FO: First-Order (White-Box), ZO: Zeroth-Order (Black-box)",
-                    choices=['FO', 'ZO'])
+                    choices=['FO', 'ZO', 'ES'])
 parser.add_argument('--zo_method', default='RGE', type=str,
                     help="Random Gradient Estimation: RGE, Coordinate-Wise Gradient Estimation: CGE",
-                    choices=['RGE', 'CGE', 'CGE_sim'])
+                    choices=['RGE', 'CGE', 'CGE_sim', 'GES'])
 parser.add_argument('--q', default=192, type=int, metavar='N',
                     help='query direction (default: 20)')
 parser.add_argument('--mu', default=0.005, type=float, metavar='N',
@@ -567,8 +567,8 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 loss = criterion(recon, targets)
                 return loss
             
-            med = GES(loader, criterion)
-            med.ges(denoiser.parameters(), loss_fn)
+            med = GES(loader, denoiser, criterion)
+            med.ges(list(denoiser.parameters()), loss_fn)
             
             
     else:
