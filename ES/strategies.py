@@ -58,6 +58,7 @@ class GES:
             else:
                 U, _ = np.linalg.qr(np.array(surg_grads).T)
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=0.5)
+                g_hat = g_hat.cpu()
                 surg_grads.pop(0)
                 surg_grads.append(g_hat)
                 # sg = loss_fn.compute_gradient(x, bias_coef=1., noise_coef=1.5)[0]
