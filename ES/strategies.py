@@ -53,7 +53,7 @@ class GES:
             time_st = time.time()
             if current_iter < k:
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=1)
-                g_hat = g_hat.detach()
+                g_hat = g_hat.cpu()
                 surg_grads.append(g_hat)
             else:
                 U, _ = np.linalg.qr(np.array(surg_grads).T)
