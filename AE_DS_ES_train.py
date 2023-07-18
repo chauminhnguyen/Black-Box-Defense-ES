@@ -18,6 +18,8 @@ from robustness.tools.imagenet_helpers import common_superclass_wnid, ImageNetHi
 from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
 from ES.strategies import GES
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
+
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 
@@ -556,8 +558,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
             '''
             def loss_fn(weight, model, criterion, inputs, targets):
                 with torch.no_grad():
-                    for p in model.parameters():
-                        p.copy_(weight)
+                    vector_to_parameters(weight, denoiser.parameters())
 
                 # augment inputs with noise
                 noise = torch.randn_like(inputs, device='cuda') * noise_sd
@@ -568,7 +569,8 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 return loss
             
             med = GES(loader, denoiser, criterion)
-            med.ges(list(denoiser.parameters()), loss_fn)
+            denoise_w = parameters_to_vector(denoiser.parameters()).detach().clone()
+            med.ges(denoise_w, loss_fn)
             
             
     else:

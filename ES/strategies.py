@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 import time
 import torch
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 class GES:
     def __init__(self, loader, model, criterion):
@@ -23,10 +24,17 @@ class GES:
             targets = targets.cuda()
 
             if alpha > 0.5:
-                noise = a * np.random.randn(1, len(x))
+                # noise = a * np.random.randn(1, len(x))
+                noise = a * torch.rand(1, len(x))
             else:
-                noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-            noise = noise.reshape(x.shape)
+                # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
+                noise = a * torch.rand(1, len(x)) + c * torch.rand(1, k) @ U.T
+            noise = noise.reshape(x.shape).cuda()
+
+            # The loss_fn returns the output with the shape equals to the batch size, yet the noise has the shape of 1 * len(x)
+            # torch.Size([256]) torch.Size([256]) f(x+noise) f(x-noise) torch.Size([256])
+            # torch.Size([558400]) noise.shape
+
             grad += noise * (loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
                              loss_fn(x - noise, self.model, self.criterion, inputs, targets))
         return grad / (2 * pop_size * sigma ** 2)
@@ -35,7 +43,7 @@ class GES:
         x = deepcopy(x_init)
         total_sample, current_iter = 0, 0
         U, surg_grads = None, []
-        xs, ys, ts, errors = [0], [loss_fn(x)], [0.], [0.]
+        xs, ys, ts, errors = [], [], [], []
         while total_sample < max_samples:
             time_st = time.time()
             if current_iter < k:
@@ -51,8 +59,7 @@ class GES:
             errors.append(np.dot(2*x, g_hat)/(np.linalg.norm(2*x) * np.linalg.norm(g_hat)))
             x -= lr * g_hat
             with torch.no_grad():
-                for p in self.model.parameters():
-                    p.copy_(torch.from_numpy(x))
+                vector_to_parameters(x, self.model.parameters())
 
             xs.append(2*pop_size)
             ys.append(loss_fn(x))
