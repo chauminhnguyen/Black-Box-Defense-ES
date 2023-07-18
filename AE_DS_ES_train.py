@@ -571,7 +571,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
             
             med = GES(loader, denoiser, criterion)
             denoise_w = parameters_to_vector(denoiser.parameters()).detach().clone()
-            med.ges(denoise_w, loss_fn)
+            ts, errors = med.ges(denoise_w, loss_fn)
 
     else:
         for i, (inputs, targets) in enumerate(loader):

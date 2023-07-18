@@ -48,7 +48,7 @@ class GES:
         x = deepcopy(x_init)
         total_sample, current_iter = 0, 0
         U, surg_grads = None, []
-        xs, ys, ts, errors = [], [], [], []
+        ts, errors = [], []
         while total_sample < max_samples:
             time_st = time.time()
             if current_iter < k:
@@ -63,15 +63,13 @@ class GES:
                 surg_grads.append(g_hat)
                 # sg = loss_fn.compute_gradient(x, bias_coef=1., noise_coef=1.5)[0]
                 # surg_grads.append(sg)
+            x = x.cpu()
             errors.append(np.dot(2*x, g_hat)/(np.linalg.norm(2*x) * np.linalg.norm(g_hat)))
             x -= lr * g_hat
             with torch.no_grad():
                 vector_to_parameters(x, self.model.parameters())
 
-            xs.append(2*pop_size)
-            ys.append(loss_fn(x))
-            ts.append(time.time() - time_st)
             total_sample += pop_size*2
             current_iter += 1
         print('guided es use time :%.2f sec' % np.sum(ts))
-        return xs, ys, ts, errors
+        return ts, errors
