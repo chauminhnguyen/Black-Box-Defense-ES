@@ -38,7 +38,9 @@ class GES:
             
             antithetic = loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
                          loss_fn(x - noise, self.model, self.criterion, inputs, targets)
-            g = antithetic.unsqueeze(1) * noise.unsqueeze(0).sum(axis=0)
+            antithetic = antithetic.unsqueeze(1).detach()
+            noise = noise.unsqueeze(0).detach()
+            g = (antithetic * noise).sum(axis=0)
             grad += g
         return grad / (2 * pop_size * sigma ** 2)
 
@@ -51,6 +53,7 @@ class GES:
             time_st = time.time()
             if current_iter < k:
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=1)
+                g_hat = g_hat.detach()
                 surg_grads.append(g_hat)
             else:
                 U, _ = np.linalg.qr(np.array(surg_grads).T)
