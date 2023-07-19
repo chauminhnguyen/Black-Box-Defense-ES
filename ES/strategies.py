@@ -53,20 +53,20 @@ class GES:
             time_st = time.time()
             if current_iter < k:
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=1)
-                g_hat = g_hat.cpu()
-                surg_grads.append(g_hat)
+                g_hat_cpu = g_hat.cpu()
+                surg_grads.append(g_hat_cpu)
             else:
-                surg_grads_tensor = torch.cat(surg_grads, dim=0)
+                surg_grads_tensor = torch.cat(surg_grads, dim=0).unsqueeze(0)
                 U, _ = torch.linalg.qr(surg_grads_tensor.T)
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=0.5)
-                g_hat = g_hat.cpu()
+                g_hat_cpu = g_hat.cpu()
                 surg_grads.pop(0)
-                surg_grads.append(g_hat)
+                surg_grads.append(g_hat_cpu)
                 # sg = loss_fn.compute_gradient(x, bias_coef=1., noise_coef=1.5)[0]
                 # surg_grads.append(sg)
             
-            x = x.cpu()
-            errors.append(np.dot(2*x, g_hat)/(np.linalg.norm(2*x) * np.linalg.norm(g_hat)))
+            x_cpu = x.cpu()
+            errors.append(np.dot(2*x_cpu, g_hat_cpu)/(np.linalg.norm(2*x_cpu) * np.linalg.norm(g_hat_cpu)))
             x -= lr * g_hat
             with torch.no_grad():
                 vector_to_parameters(x, self.model.parameters())
@@ -74,4 +74,4 @@ class GES:
             total_sample += pop_size*2
             current_iter += 1
         print('guided es use time :%.2f sec' % np.sum(ts))
-        return ts, errors
+        return ts, errors, x
