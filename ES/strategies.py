@@ -11,6 +11,10 @@ class GES:
         self.loader = loader
         self.model = model
         self.criterion = criterion
+
+    def set_weights(self, x):
+        with torch.no_grad():
+            vector_to_parameters(x, self.model.parameters())
     
     # Guided-ES framework to estimate gradients
     def ges_compute_grads(self, x, loss_fn, U, k=1, pop_size=1, sigma=0.1, alpha=0.5):
@@ -36,8 +40,8 @@ class GES:
             # torch.Size([256]) torch.Size([256]) f(x+noise) f(x-noise) torch.Size([256])
             # torch.Size([558400]) noise.shape
             
-            antithetic = loss_fn(x + noise, self.model, self.criterion, inputs, targets) - \
-                         loss_fn(x - noise, self.model, self.criterion, inputs, targets)
+            antithetic = loss_fn(x + noise, self.criterion, inputs, targets) - \
+                         loss_fn(x - noise, self.criterion, inputs, targets)
             antithetic = antithetic.unsqueeze(1).detach()
             noise = noise.unsqueeze(0).detach()
             g = (antithetic * noise).sum(axis=0)

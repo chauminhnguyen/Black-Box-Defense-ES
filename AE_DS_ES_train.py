@@ -557,21 +557,23 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 loss.backward()
             '''
             denoiser.eval()
-            def loss_fn(weight, model, criterion, inputs, targets):
-                with torch.no_grad():
-                    vector_to_parameters(weight, denoiser.parameters())
+            def loss_fn(weight, criterion, inputs, targets):
+                # with torch.no_grad():
+                #     vector_to_parameters(weight, denoiser.parameters())
+                med.set_weights(weight)
 
                 # augment inputs with noise
                 noise = torch.randn_like(inputs, device='cuda') * noise_sd
 
-                recon = denoiser(inputs + noise)
+                recon = med.model(inputs + noise)
                 recon = classifier(recon)
                 loss = criterion(recon, targets)
                 return loss
             
             med = GES(loader, denoiser, criterion)
             denoise_w = parameters_to_vector(denoiser.parameters()).detach().clone()
-            ts, errors, x = med.ges(denoise_w, loss_fn)
+            ts, losses, x = med.ges(denoise_w, loss_fn, max_samples=20)
+            print('ts: ', ts, 'errors: ', losses)
             with torch.no_grad():
                 vector_to_parameters(x, denoiser.parameters())
         
