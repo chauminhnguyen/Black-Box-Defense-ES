@@ -52,9 +52,8 @@ class GES:
         x = deepcopy(x_init)
         total_sample, current_iter = 0, 0
         U, surg_grads = None, []
-        ts, errors = [], []
+        errors = []
         while total_sample < max_samples:
-            time_st = time.time()
             if current_iter < k:
                 g_hat = self.ges_compute_grads(x, loss_fn, U, k, pop_size=pop_size, sigma=sigma, alpha=1)
                 g_hat_cpu = g_hat.cpu()
@@ -70,6 +69,8 @@ class GES:
                 # surg_grads.append(sg)
             
             x_cpu = x.cpu()
+            print(x_cpu.max(), x_cpu.min(), x_cpu.mean(), x_cpu.std())
+            print(g_hat_cpu.max(), g_hat_cpu.min(), g_hat_cpu.mean(), g_hat_cpu.std())
             errors.append(np.dot(2*x_cpu, g_hat_cpu)/(np.linalg.norm(2*x_cpu) * np.linalg.norm(g_hat_cpu)))
             x -= lr * g_hat
             with torch.no_grad():
@@ -77,5 +78,4 @@ class GES:
 
             total_sample += pop_size*2
             current_iter += 1
-        print('guided es use time :%.2f sec' % np.sum(ts))
-        return ts, errors, x
+        return errors, x
