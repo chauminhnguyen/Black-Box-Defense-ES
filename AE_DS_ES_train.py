@@ -591,7 +591,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
         k = 20
         pop_size = 2
     from tqdm import tqdm
-    for i, (inputs, targets) in enumerate(loader):
+    for i, (inputs, targets) in tqdm(enumerate(loader)):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -677,10 +677,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                     # Forward Inference (Original)
                     original_pre = classifier(inputs).argmax(1).detach().clone()
 
-                    recon_pre = classifier(decoder(recon))
-                    print('========================')
-                    print(recon_pre.shape, recon.shape, targets.shape)
-                        
+                    recon_pre = classifier(decoder(recon))     
                     loss_0 = criterion(recon_pre, original_pre)
 
                     # record original loss
