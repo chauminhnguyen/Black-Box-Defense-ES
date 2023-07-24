@@ -757,18 +757,16 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 c = sigma * np.sqrt((1 - alpha) / k)
                 batch_size = recon.size()[0]
 
-                for i in range(batch_size):
-                    if alpha > 0.5:
-                        # noise = a * np.random.randn(1, len(x))
-                        u_flat = a * torch.rand(1, args.q, d)
-                        alpha = 1
-                    else:
-                        # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-                        u_flat = a * torch.rand(1, args.q, d) + c * torch.rand(1, k) @ U.T
                 
-                    u_flat = u_flat.reshape(inputs.shape).cuda()
-
-
+                if alpha > 0.5:
+                    # noise = a * np.random.randn(1, len(x))
+                    u_flat = a * torch.rand(batch_size, args.q, d)
+                    alpha = 1
+                else:
+                    # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
+                    u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
+                
+                u_flat = u_flat.reshape(inputs.shape).cuda()
                 u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
                 u = u_flat.view(-1, channel, h, w)
 
