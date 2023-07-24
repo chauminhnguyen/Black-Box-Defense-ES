@@ -19,6 +19,7 @@ from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
 from ES.strategies import GES
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
+import numpy as np
 
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -544,223 +545,282 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
     if classifier:
         classifier.eval()
 
-    if args.optimization_method == 'ES':
-        if args.zo_method =='GES': # Guided evolutionary strategies
-            '''
-            For total_sample < max_samples:
-                For batch in dataset: # which is the pop_size
-                    grad += noise * loss_fn(batch + noise) - loss_fn(batch - noise)  #ofc x is the weight
+    # if args.optimization_method == 'ES':
+    #     if args.zo_method =='GES': # Guided evolutionary strategies
+    #         '''
+    #         For total_sample < max_samples:
+    #             For batch in dataset: # which is the pop_size
+    #                 grad += noise * loss_fn(batch + noise) - loss_fn(batch - noise)  #ofc x is the weight
 
 
-                loss = recon * grad
-                opt.zero_grad()
-                loss.backward()
-            '''
-            denoiser.eval()
-            def loss_fn(weight, criterion, inputs, targets):
-                # with torch.no_grad():
-                #     vector_to_parameters(weight, denoiser.parameters())
-                med.set_weights(weight)
+    #             loss = recon * grad
+    #             opt.zero_grad()
+    #             loss.backward()
+    #         '''
+    #         denoiser.eval()
+    #         def loss_fn(weight, criterion, inputs, targets):
+    #             # with torch.no_grad():
+    #             #     vector_to_parameters(weight, denoiser.parameters())
+    #             med.set_weights(weight)
 
-                # augment inputs with noise
-                noise = torch.randn_like(inputs, device='cuda') * noise_sd
+    #             # augment inputs with noise
+    #             noise = torch.randn_like(inputs, device='cuda') * noise_sd
 
-                recon = med.model(inputs + noise)
-                recon = classifier(recon)
-                loss = criterion(recon, targets)
-                return loss
+    #             recon = med.model(inputs + noise)
+    #             # recon = encoder(recon)
+    #             # recon = decoder(recon)
+    #             recon = classifier(recon)
+    #             loss = criterion(recon, targets)
+    #             return loss
             
-            med = GES(loader, denoiser, criterion)
-            denoise_w = parameters_to_vector(denoiser.parameters()).detach().clone()
-            errors, x = med.ges(denoise_w, loss_fn, lr=args.lr, max_samples=20)
+    #         med = GES(loader, denoiser, criterion)
+    #         denoise_w = parameters_to_vector(denoiser.parameters()).detach().clone()
+    #         errors, x = med.ges(denoise_w, loss_fn, lr=args.lr, max_samples=20)
             
-            print('errors: ', errors)
-            for error in errors:
-                losses.update(error)
-            with torch.no_grad():
-                vector_to_parameters(x, denoiser.parameters())
+    #         print('errors: ', errors)
+    #         for error in errors:
+    #             losses.update(error)
+    #         with torch.no_grad():
+    #             vector_to_parameters(x, denoiser.parameters())
         
-    else:
-        for i, (inputs, targets) in enumerate(loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
+    # else:
+    if args.zo_method =='GES':
+        U, surg_grads = None, []
+        alpha = 1
 
-            inputs = inputs.cuda()
-            targets = targets.cuda()
-            if args.ground_truth == 'original_output':
+    for i, (inputs, targets) in enumerate(loader):
+        # measure data loading time
+        data_time.update(time.time() - end)
+
+        inputs = inputs.cuda()
+        targets = targets.cuda()
+        if args.ground_truth == 'original_output':
+            with torch.no_grad():
+                targets = classifier(inputs)
+                targets = targets.argmax(1).detach().clone()
+
+        # augment inputs with noise
+        noise = torch.randn_like(inputs, device='cuda') * noise_sd
+
+        recon = denoiser(inputs + noise)
+        recon = encoder(recon)
+
+        if args.optimization_method == 'FO':
+            recon = decoder(recon)
+            recon = classifier(recon)
+            loss = criterion(recon, targets)
+
+            # record loss
+            losses.update(loss.item(), inputs.size(0))
+
+        elif args.optimization_method == 'ZO':
+            recon.requires_grad_(True)
+            recon.retain_grad()
+
+            # Obtain the Shape of Inputs (Batch_size x Channel x H x W)
+            batch_size = recon.size()[0]
+            channel = recon.size()[1]
+            h = recon.size()[2]
+            w = recon.size()[3]
+            d = channel * h * w
+
+            if args.zo_method =='RGE':
                 with torch.no_grad():
-                    targets = classifier(inputs)
-                    targets = targets.argmax(1).detach().clone()
+                    m, sigma = 0, 100  # mean and standard deviation
+                    mu = torch.tensor(args.mu).cuda()
+                    q = torch.tensor(args.q).cuda()
 
-            # augment inputs with noise
-            noise = torch.randn_like(inputs, device='cuda') * noise_sd
+                    # Forward Inference (Original)
+                    original_pre = classifier(inputs).argmax(1).detach().clone()
 
-            recon = denoiser(inputs + noise)
-            recon = encoder(recon)
+                    recon_pre = classifier(decoder(recon))
+                    loss_0 = criterion(recon_pre, original_pre)
 
-            if args.optimization_method == 'FO':
-                recon = decoder(recon)
-                recon = classifier(recon)
-                loss = criterion(recon, targets)
+                    # record original loss
+                    loss_0_mean = loss_0.mean()
+                    losses.update(loss_0_mean.item(), inputs.size(0))
 
-                # record loss
-                losses.update(loss.item(), inputs.size(0))
+                    recon_flat_no_grad = torch.flatten(recon, start_dim=1).cuda()
+                    grad_est = torch.zeros(batch_size, d).cuda()
 
-            elif args.optimization_method == 'ZO':
-                recon.requires_grad_(True)
-                recon.retain_grad()
+                    # ZO Gradient Estimation
+                    for k in range(args.q):
+                        # Obtain a random direction vector
+                        u = torch.normal(m, sigma, size=(batch_size, d))
+                        u_norm = torch.norm(u, p=2, dim=1).reshape(batch_size, 1).expand(batch_size, d)    # dim -- careful
+                        u = torch.div(u, u_norm).cuda()       # (batch_size, d)
 
-                # Obtain the Shape of Inputs (Batch_size x Channel x H x W)
-                batch_size = recon.size()[0]
-                channel = recon.size()[1]
-                h = recon.size()[2]
-                w = recon.size()[3]
-                d = channel * h * w
+                        # Forward Inference (reconstructed image + random direction vector)
+                        recon_q = recon_flat_no_grad + mu * u
+                        recon_q = recon_q.view(batch_size, channel, h, w)
+                        recon_q_pre = classifier(decoder(recon_q))
 
-                if args.zo_method =='RGE':
-                    with torch.no_grad():
-                        m, sigma = 0, 100  # mean and standard deviation
-                        mu = torch.tensor(args.mu).cuda()
-                        q = torch.tensor(args.q).cuda()
+                        # Loss Calculation and Gradient Estimation
+                        loss_tmp = criterion(recon_q_pre, original_pre)
+                        loss_diff = torch.tensor(loss_tmp - loss_0)
+                        grad_est = grad_est + (d / q) * u * loss_diff.reshape(batch_size, 1).expand_as(u) / mu
 
-                        # Forward Inference (Original)
-                        original_pre = classifier(inputs).argmax(1).detach().clone()
+                recon_flat = torch.flatten(recon, start_dim=1).cuda()
+                grad_est_no_grad = grad_est.detach()
 
-                        recon_pre = classifier(decoder(recon))
-                        loss_0 = criterion(recon_pre, original_pre)
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
 
-                        # record original loss
-                        loss_0_mean = loss_0.mean()
-                        losses.update(loss_0_mean.item(), inputs.size(0))
+            elif args.zo_method =='CGE':
+                with torch.no_grad():
+                    mu = torch.tensor(args.mu).cuda()
+                    q = torch.tensor(args.q).cuda()
 
-                        recon_flat_no_grad = torch.flatten(recon, start_dim=1).cuda()
-                        grad_est = torch.zeros(batch_size, d).cuda()
+                    # Forward Inference (Original)
+                    original_pre = classifier(inputs).argmax(1).detach().clone()
 
-                        # ZO Gradient Estimation
-                        for k in range(args.q):
-                            # Obtain a random direction vector
-                            u = torch.normal(m, sigma, size=(batch_size, d))
-                            u_norm = torch.norm(u, p=2, dim=1).reshape(batch_size, 1).expand(batch_size, d)    # dim -- careful
-                            u = torch.div(u, u_norm).cuda()       # (batch_size, d)
+                    recon_pre = classifier(decoder(recon))
+                    loss_0 = criterion(recon_pre, original_pre)
 
-                            # Forward Inference (reconstructed image + random direction vector)
-                            recon_q = recon_flat_no_grad + mu * u
-                            recon_q = recon_q.view(batch_size, channel, h, w)
-                            recon_q_pre = classifier(decoder(recon_q))
+                    # record original loss
+                    loss_0_mean = loss_0.mean()
+                    losses.update(loss_0_mean.item(), inputs.size(0))
 
-                            # Loss Calculation and Gradient Estimation
-                            loss_tmp = criterion(recon_q_pre, original_pre)
-                            loss_diff = torch.tensor(loss_tmp - loss_0)
-                            grad_est = grad_est + (d / q) * u * loss_diff.reshape(batch_size, 1).expand_as(u) / mu
+                    recon_flat_no_grad = torch.flatten(recon, start_dim=1).cuda()
+                    grad_est = torch.zeros(batch_size, d).cuda()
 
-                    recon_flat = torch.flatten(recon, start_dim=1).cuda()
-                    grad_est_no_grad = grad_est.detach()
-
-                    # reconstructed image * gradient estimation   <--   g(x) * a
-                    loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
-
-                elif args.zo_method =='CGE':
-                    with torch.no_grad():
-                        mu = torch.tensor(args.mu).cuda()
-                        q = torch.tensor(args.q).cuda()
-
-                        # Forward Inference (Original)
-                        original_pre = classifier(inputs).argmax(1).detach().clone()
-
-                        recon_pre = classifier(decoder(recon))
-                        loss_0 = criterion(recon_pre, original_pre)
-
-                        # record original loss
-                        loss_0_mean = loss_0.mean()
-                        losses.update(loss_0_mean.item(), inputs.size(0))
-
-                        recon_flat_no_grad = torch.flatten(recon, start_dim=1).cuda()
-                        grad_est = torch.zeros(batch_size, d).cuda()
-
-                        # ZO Gradient Estimation
-                        for k in range(d):
-                            # Obtain a direction vector (1-0)
-                            u = torch.zeros(batch_size, d).cuda()
-                            u[:, k] = 1
-
-                            # Forward Inference (reconstructed image + random direction vector)
-                            recon_q_plus = recon_flat_no_grad + mu * u
-                            recon_q_minus = recon_flat_no_grad - mu * u
-
-                            recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
-                            recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
-                            recon_q_pre_plus = classifier(decoder(recon_q_plus))
-                            recon_q_pre_minus = classifier(decoder(recon_q_minus))
-
-                            # Loss Calculation and Gradient Estimation
-                            loss_tmp_plus = criterion(recon_q_pre_plus, original_pre)
-                            loss_tmp_minus = criterion(recon_q_pre_minus, original_pre)
-
-                            loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
-                            grad_est = grad_est + u * loss_diff.reshape(batch_size, 1).expand_as(u) / (2 * mu)
-
-                    recon_flat = torch.flatten(recon, start_dim=1).cuda()
-                    grad_est_no_grad = grad_est.detach()
-
-                    # reconstructed image * gradient estimation   <--   g(x) * a
-                    loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
-
-                elif args.zo_method =='CGE_sim':
-                    # Generate Coordinate-wise Query Matrix
-                    u_flat = torch.zeros(1, args.q, d).cuda()
+                    # ZO Gradient Estimation
                     for k in range(d):
-                        u_flat[:, k, k] = 1
-                    u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
-                    u = u_flat.view(-1, channel, h, w)
+                        # Obtain a direction vector (1-0)
+                        u = torch.zeros(batch_size, d).cuda()
+                        u[:, k] = 1
 
-                    with torch.no_grad():
-                        mu = torch.tensor(args.mu).cuda()
+                        # Forward Inference (reconstructed image + random direction vector)
+                        recon_q_plus = recon_flat_no_grad + mu * u
+                        recon_q_minus = recon_flat_no_grad - mu * u
 
-                        recon_pre = classifier(decoder(recon))  # (batch_size, 10)
-
-                        loss_0 = criterion(recon_pre, targets)  # (batch_size )
-                        loss_0_mean = loss_0.mean()
-                        losses.update(loss_0_mean.item(), inputs.size(0))
-
-                        # Repeat q times
-                        targets = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
-
-                        recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w)
-                        recon_q_plus = recon_q + mu * u
-                        recon_q_minus = recon_q - mu * u
-
-                        # Black-Box Query
+                        recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
+                        recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
                         recon_q_pre_plus = classifier(decoder(recon_q_plus))
                         recon_q_pre_minus = classifier(decoder(recon_q_minus))
-                        loss_tmp_plus = criterion(recon_q_pre_plus, targets)
-                        loss_tmp_minus = criterion(recon_q_pre_minus, targets)
+
+                        # Loss Calculation and Gradient Estimation
+                        loss_tmp_plus = criterion(recon_q_pre_plus, original_pre)
+                        loss_tmp_minus = criterion(recon_q_pre_minus, original_pre)
 
                         loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
-                        grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
-                        grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d)
+                        grad_est = grad_est + u * loss_diff.reshape(batch_size, 1).expand_as(u) / (2 * mu)
 
-                    recon_flat = torch.flatten(recon, start_dim=1).cuda()
-                    grad_est_no_grad = grad_est.detach()
+                recon_flat = torch.flatten(recon, start_dim=1).cuda()
+                grad_est_no_grad = grad_est.detach()
 
-                    # reconstructed image * gradient estimation   <--   g(x) * a
-                    loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
 
-            # compute gradient and do SGD step
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            elif args.zo_method =='CGE_sim':
+                # Generate Coordinate-wise Query Matrix
+                u_flat = torch.zeros(1, args.q, d).cuda()
+                for k in range(d):
+                    u_flat[:, k, k] = 1
+                u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
+                u = u_flat.view(-1, channel, h, w)
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+                with torch.no_grad():
+                    mu = torch.tensor(args.mu).cuda()
 
-            if i % args.print_freq == 0:
-                print('Epoch: [{0}][{1}/{2}]\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                    'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
-                    epoch, i, len(loader), batch_time=batch_time,
-                    data_time=data_time, loss=losses))
+                    recon_pre = classifier(decoder(recon))  # (batch_size, 10)
+
+                    loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                    loss_0_mean = loss_0.mean()
+                    losses.update(loss_0_mean.item(), inputs.size(0))
+
+                    # Repeat q times
+                    targets = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
+
+                    recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w)
+                    recon_q_plus = recon_q + mu * u
+                    recon_q_minus = recon_q - mu * u
+
+                    # Black-Box Query
+                    recon_q_pre_plus = classifier(decoder(recon_q_plus))
+                    recon_q_pre_minus = classifier(decoder(recon_q_minus))
+                    loss_tmp_plus = criterion(recon_q_pre_plus, targets)
+                    loss_tmp_minus = criterion(recon_q_pre_minus, targets)
+
+                    loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
+                    grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
+                    grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d)
+
+                recon_flat = torch.flatten(recon, start_dim=1).cuda()
+                grad_est_no_grad = grad_est.detach()
+
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+
+            elif args.zo_method =='GES':
+                a = sigma * np.sqrt(alpha / d)
+                c = sigma * np.sqrt((1 - alpha) / k)
+                batch_size = recon.size()[0]
+
+                for i in range(batch_size):
+                    if alpha > 0.5:
+                        # noise = a * np.random.randn(1, len(x))
+                        u_flat = a * torch.rand(1, args.q, d)
+                        alpha = 1
+                    else:
+                        # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
+                        u_flat = a * torch.rand(1, args.q, d) + c * torch.rand(1, k) @ U.T
+                
+                    u_flat = u_flat.reshape(inputs.shape).cuda()
+
+
+                u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
+                u = u_flat.view(-1, channel, h, w)
+
+                with torch.no_grad():
+                    mu = torch.tensor(args.mu).cuda()
+
+                    recon_pre = classifier(decoder(recon))  # (batch_size, 10)
+
+                    loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                    loss_0_mean = loss_0.mean()
+                    losses.update(loss_0_mean.item(), inputs.size(0))
+
+                    # Repeat q times
+                    targets = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
+
+                    recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w)
+                    recon_q_plus = recon_q + mu * u
+                    recon_q_minus = recon_q - mu * u
+
+                    # Black-Box Query
+                    recon_q_pre_plus = classifier(decoder(recon_q_plus))
+                    recon_q_pre_minus = classifier(decoder(recon_q_minus))
+                    loss_tmp_plus = criterion(recon_q_pre_plus, targets)
+                    loss_tmp_minus = criterion(recon_q_pre_minus, targets)
+
+                    loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
+                    grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
+                    U, _ = torch.linalg.qr(grad_est.T)
+                    grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d)
+
+                recon_flat = torch.flatten(recon, start_dim=1).cuda()
+                grad_est_no_grad = grad_est.detach()
+
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            print('Epoch: [{0}][{1}/{2}]\t'
+                'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
+                epoch, i, len(loader), batch_time=batch_time,
+                data_time=data_time, loss=losses))
 
     return losses.avg
 
