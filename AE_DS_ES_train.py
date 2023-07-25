@@ -589,7 +589,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
         alpha = 1
         sigma = 0.01
         k = 20
-        pop_size = 2
+        
     from tqdm import tqdm
     for i, (inputs, targets) in tqdm(enumerate(loader)):
         # measure data loading time
@@ -760,49 +760,50 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 c = sigma * np.sqrt((1 - alpha) / k)
                 batch_size = recon.size()[0]
 
-                for i in range(pop_size):
-                    if alpha > 0.5:
-                        # noise = a * np.random.randn(1, len(x))
-                        u_flat = a * torch.rand(batch_size, args.q, d)
-                        alpha = 1
-                    else:
-                        # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-                        u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
+                # for i in range(pop_size):
+                if alpha > 0.5:
+                    # noise = a * np.random.randn(1, len(x))
+                    u_flat = a * torch.rand(batch_size, args.q, d)
+                    alpha = 1
+                else:
+                    # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
+                    u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
+                
+                # u_flat = u_flat.reshape(inputs.shape).cuda()
+                # u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
+                u_flat = u_flat.view(batch_size * args.q, d).cuda()
+                u = u_flat.view(-1, channel, h, w)
+
+                with torch.no_grad():
+                    mu = torch.tensor(args.mu).cuda()
+
+                    recon_pre = classifier(decoder(recon))  # (batch_size, 10)
+                    loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                    loss_0_mean = loss_0.mean()
+                    losses.update(loss_0_mean.item(), inputs.size(0))
+
+                    # Repeat q times
+                    targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
+
+                    recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w) # batch_size * q, channel, h, w
+                    recon_q_plus = recon_q + mu * u
+                    recon_q_minus = recon_q - mu * u
+
+                    # Black-Box Query
+                    recon_q_pre_plus = classifier(decoder(recon_q_plus))
+                    recon_q_pre_minus = classifier(decoder(recon_q_minus))
+                    loss_tmp_plus = criterion(recon_q_pre_plus, targets_)
+                    loss_tmp_minus = criterion(recon_q_pre_minus, targets_)
+
+                    loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
                     
-                    # u_flat = u_flat.reshape(inputs.shape).cuda()
-                    # u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
-                    u_flat = u_flat.view(batch_size * args.q, d).cuda()
-                    u = u_flat.view(-1, channel, h, w)
-
-                    with torch.no_grad():
-                        mu = torch.tensor(args.mu).cuda()
-
-                        recon_pre = classifier(decoder(recon))  # (batch_size, 10)
-                        loss_0 = criterion(recon_pre, targets)  # (batch_size )
-                        loss_0_mean = loss_0.mean()
-                        losses.update(loss_0_mean.item(), inputs.size(0))
-
-                        # Repeat q times
-                        targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
-
-                        recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w)
-                        recon_q_plus = recon_q + mu * u
-                        recon_q_minus = recon_q - mu * u
-
-                        # Black-Box Query
-                        recon_q_pre_plus = classifier(decoder(recon_q_plus))
-                        recon_q_pre_minus = classifier(decoder(recon_q_minus))
-                        loss_tmp_plus = criterion(recon_q_pre_plus, targets_)
-                        loss_tmp_minus = criterion(recon_q_pre_minus, targets_)
-
-                        loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
-                        
-                        grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
-                        grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d)
-                        surg_grads.append(grad_est)
+                    grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
+                    grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d) / (2 * args.q * sigma ** 2)
+                    surg_grads.pop(0) if surg_grads else surg_grads
+                    surg_grads.append(grad_est)
 
                 surg_grads_tensor = torch.cat(surg_grads, dim=0)
-                surg_grads_tensor = torch.sum(surg_grads_tensor, dim=0).unsqueeze(0)
+                # surg_grads_tensor = torch.sum(surg_grads_tensor, dim=0).unsqueeze(0)
                 U, _ = torch.linalg.qr(surg_grads_tensor.T)
 
                 recon_flat = torch.flatten(recon, start_dim=1).cuda()
