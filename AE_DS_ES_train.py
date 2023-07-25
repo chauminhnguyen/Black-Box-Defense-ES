@@ -764,7 +764,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 if alpha > 0.5:
                     # noise = a * np.random.randn(1, len(x))
                     u_flat = a * torch.rand(batch_size, args.q, d)
-                    alpha = 1
+                    alpha = 0.5
                 else:
                     # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
                     u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
