@@ -798,7 +798,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                     loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
                     
                     grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
-                    grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d) / (2 * args.q * sigma ** 2)
+                    grad_est = grad_est.view(batch_size, args.q, d).sum(1, keepdim=True).view(batch_size,d) / (2 * args.q * sigma ** 2)
                     surg_grads.pop(0) if surg_grads else surg_grads
                     surg_grads.append(grad_est)
 
