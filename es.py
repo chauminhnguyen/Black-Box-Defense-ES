@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 class GES:
-    def __init__(self, q, sigma, mu, k):
+    def __init__(self, q, sigma, mu):
         '''
         q: number of samples
         sigma: noise scale
@@ -13,13 +13,10 @@ class GES:
         self.q = q
         self.sigma = sigma
         self.mu = mu
-        self.k = k # subspace dimensions
+        # self.k = k # subspace dimensions
         self.alpha = 1
-        self.total_samples = 0
     
     def run(self, inputs, loss_fn):
-        if self.total_samples >= self.k:
-            self.alpha = 0.5
         batch_size = inputs.size()[0]
         channel = inputs.size()[1]
         h = inputs.size()[2]
@@ -27,13 +24,13 @@ class GES:
         d = channel * h * w
 
         a = self.sigma * np.sqrt(self.alpha / d)
-        c = self.sigma * np.sqrt((1 - self.alpha) / self.k)
+        c = self.sigma * np.sqrt((1 - self.alpha) / batch_size)
 
         if self.alpha > 0.5:
-            u_flat = a * torch.rand(1, self.q, d)
-            # self.alpha = 0.5
+            u_flat = a * torch.rand(batch_size, self.q, d)
+            self.alpha = 0.5
         else:
-            u_flat = a * torch.rand(1, self.q, d).cuda() + c * torch.rand(1, self.k).cuda() @ self.U.T
+            u_flat = a * torch.rand(batch_size, self.q, d).cuda() + c * torch.rand(1, batch_size).cuda() @ self.U.T
         
         u_flat = u_flat.view(batch_size * self.q, d).cuda()
         u = u_flat.view(-1, channel, h, w)
@@ -61,7 +58,6 @@ class GES:
 
         recon_flat = torch.flatten(inputs, start_dim=1).cuda()
         grad_est_no_grad = grad_est.detach()
-        self.total_samples += 2*batch_size
 
         return grad_est_no_grad, recon_flat
 
