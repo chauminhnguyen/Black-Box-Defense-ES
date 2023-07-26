@@ -756,9 +756,9 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
 
             elif args.zo_method =='GES':
-                a = sigma * np.sqrt(alpha / d)
-                c = sigma * np.sqrt((1 - alpha) / k)
                 batch_size = recon.size()[0]
+                a = sigma * np.sqrt(alpha / d)
+                c = sigma * np.sqrt((1 - alpha) / batch_size)
 
                 # for i in range(pop_size):
                 if alpha > 0.5:
@@ -767,7 +767,8 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                     alpha = 0.5
                 else:
                     # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-                    u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
+                    U = U.cuda()
+                    u_flat = a * torch.rand(batch_size, args.q, d).cuda() + c * torch.rand(1, batch_size).cuda() @ U.T
                 
                 # u_flat = u_flat.reshape(inputs.shape).cuda()
                 # u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
