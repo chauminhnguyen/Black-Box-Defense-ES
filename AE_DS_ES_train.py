@@ -18,7 +18,7 @@ from robustness import datasets as dataset_r
 from robustness.tools.imagenet_helpers import common_superclass_wnid, ImageNetHierarchy
 from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
-from es import GES
+from es import GES, SGES
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 import numpy as np
 
@@ -48,7 +48,7 @@ parser.add_argument('--optimization_method', default='FO', type=str,
                     choices=['FO', 'ZO', 'ES'])
 parser.add_argument('--zo_method', default='RGE', type=str,
                     help="Random Gradient Estimation: RGE, Coordinate-Wise Gradient Estimation: CGE",
-                    choices=['RGE', 'CGE', 'CGE_sim', 'GES'])
+                    choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES'])
 parser.add_argument('--q', default=192, type=int, metavar='N',
                     help='query direction (default: 20)')
 parser.add_argument('--mu', default=0.005, type=float, metavar='N',
@@ -546,22 +546,25 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
     if classifier:
         classifier.eval()
 
+    class loss_fn:
+        def __init__(self, criterion, classifier, decoder):
+            self.classifier = classifier
+            self.decoder = decoder
+            self.criterion = criterion
+        
+        def set_target(self, targets):
+            self.targets = targets
+        
+        def __call__(self, inputs_q):
+            inputs_q_pre = self.classifier(self.decoder(inputs_q))
+            loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
+            return loss_tmp_plus
+
     if args.zo_method =='GES':
         med = GES(args.q, 0.01, 0.005)
-        class loss_fn:
-            def __init__(self, criterion, classifier, decoder):
-                self.classifier = classifier
-                self.decoder = decoder
-                self.criterion = criterion
-            
-            def set_target(self, targets):
-                self.targets = targets
-            
-            def __call__(self, inputs_q):
-                inputs_q_pre = self.classifier(self.decoder(inputs_q))
-                loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
-                return loss_tmp_plus
-                
+        loss_fn = loss_fn(criterion, classifier, decoder)
+    elif args.zo_method =='SGES':
+        med = SGES(args.q, 0.01, 0.005)
         loss_fn = loss_fn(criterion, classifier, decoder)
         
     from tqdm import tqdm
@@ -729,7 +732,8 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 # reconstructed image * gradient estimation   <--   g(x) * a
                 loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
 
-            elif args.zo_method =='GES':
+            # elif args.zo_method =='GES':
+            else:
                 recon_pre = classifier(decoder(recon))  # (batch_size, 10)
                 loss_0 = criterion(recon_pre, targets)  # (batch_size )
                 loss_0_mean = loss_0.mean()
