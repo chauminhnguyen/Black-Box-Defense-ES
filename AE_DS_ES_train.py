@@ -1,3 +1,4 @@
+from typing import Any
 from architectures import DENOISERS_ARCHITECTURES, get_architecture, IMAGENET_CLASSIFIERS, AUTOENCODER_ARCHITECTURES
 from datasets import get_dataset, DATASETS
 from torch.nn import MSELoss, CrossEntropyLoss
@@ -17,7 +18,7 @@ from robustness import datasets as dataset_r
 from robustness.tools.imagenet_helpers import common_superclass_wnid, ImageNetHierarchy
 from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
-from ES.strategies import GES
+from es import GES
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 import numpy as np
 
@@ -585,10 +586,22 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
         
     # else:
     if args.zo_method =='GES':
-        U, surg_grads = None, []
-        alpha = 1
-        sigma = 0.01
-        k = 20
+        med = GES(args.q, 0.01, 0.005)
+        class loss_fn:
+            def __init__(self, criterion, classifier, decoder):
+                self.classifier = classifier
+                self.decoder = decoder
+                self.criterion = criterion
+            
+            def set_target(self, targets):
+                self.targets = targets
+            
+            def __call__(self, inputs_q):
+                inputs_q_pre = self.classifier(self.decoder(inputs_q))
+                loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
+                return loss_tmp_plus
+                
+        loss_fn = loss_fn(criterion, classifier, decoder)
         
     from tqdm import tqdm
     for i, (inputs, targets) in tqdm(enumerate(loader)):
@@ -756,8 +769,21 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
 
             elif args.zo_method =='GES':
+                recon_pre = classifier(decoder(recon))  # (batch_size, 10)
+                loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                loss_0_mean = loss_0.mean()
+                losses.update(loss_0_mean.item(), inputs.size(0))
+                
+                targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)
+                loss_fn.set_target(targets_)
+                grad_est_no_grad, recon_flat = med.run(recon, loss_fn)
+
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+
+            elif args.zo_method =='GES2':
                 a = sigma * np.sqrt(alpha / d)
-                c = sigma * np.sqrt((1 - alpha) / k)
+                c = sigma * np.sqrt((1 - alpha) / args.batch)
                 batch_size = recon.size()[0]
 
                 # for i in range(pop_size):
@@ -767,7 +793,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                     alpha = 1
                 else:
                     # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-                    u_flat = a * torch.rand(batch_size, args.q, d) + c * torch.rand(batch_size, k) @ U.T
+                    u_flat = a * torch.rand(batch_size, args.q, d).cuda() + c * torch.rand(1, args.batch).cuda() @ U.T
                 
                 # u_flat = u_flat.reshape(inputs.shape).cuda()
                 # u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
