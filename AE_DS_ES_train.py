@@ -564,7 +564,7 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
         med = GES(args.q, 0.01, 0.005)
         loss_fn = loss_fn(criterion, classifier, decoder)
     elif args.zo_method =='SGES':
-        med = SGES(args.q, 0.01, 0.005)
+        med = SGES(args.q, 0.01, 0.005, True)
         loss_fn = loss_fn(criterion, classifier, decoder)
         
     from tqdm import tqdm

@@ -4,7 +4,7 @@ import random
 
 
 class GES:
-    def __init__(self, q, sigma, mu, k):
+    def __init__(self, q, sigma, mu):
         '''
         q: number of samples
         sigma: noise scale
@@ -15,7 +15,7 @@ class GES:
         self.q = q
         self.sigma = sigma
         self.mu = mu
-        self.k = k # subspace dimensions
+        # self.k = k # subspace dimensions
         self.alpha = 1
     
     def run(self, inputs, loss_fn):
@@ -65,12 +65,17 @@ class GES:
 
 
 class SGES:
-    def __init__(self, sigma, auto_alpha):
+    def __init__(self, q, sigma, mu, auto_alpha):
+        self.q = q
+        self.mu = mu
         self.sigma = sigma
         self.auto_alpha = auto_alpha
         self.grad_loss, self.random_loss = [], []
+        self.alpha = 0.5
+        self.U = None
+        self.surg_grads = []
 
-    def run(self, inputs, loss_fn):
+    def sges_compute_grads(self, inputs, loss_fn, alpha=0.2):
         batch_size = inputs.size()[0]
         channel = inputs.size()[1]
         h = inputs.size()[2]
@@ -81,8 +86,8 @@ class SGES:
 
         with torch.no_grad():
             mu = torch.tensor(self.mu).cuda()
-            if random.random() < self.alpha:
-                u_flat = self.sigma / np.sqrt(batch_size) * torch.rand(batch_size, self.q, d)
+            if random.random() < alpha:
+                u_flat = self.sigma / np.sqrt(d) * torch.rand(batch_size, self.q, d).cuda() + self.sigma / np.sqrt(batch_size) * torch.rand(1, batch_size).cuda() @ self.U.T
                 u_flat = u_flat.view(batch_size * self.q, d).cuda()
                 u = u_flat.view(-1, channel, h, w)
 
@@ -96,9 +101,9 @@ class SGES:
                 loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
 
                 self.grad_loss.append(torch.min(loss_tmp_plus, loss_tmp_minus))
-                sub_grad.append(u_flat * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / self.sigma ** 2)
+                sub_grad.append(u_flat * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / self.sigma ** 2 / 2)
             else:
-                u_flat = self.sigma / np.sqrt(d) * torch.rand(batch_size, self.q, d).cuda() + self.sigma / np.sqrt(batch_size) * torch.rand(1, batch_size).cuda() @ self.U.T
+                u_flat = self.sigma / np.sqrt(batch_size) * torch.rand(batch_size, self.q, d)
                 u_flat = u_flat.view(batch_size * self.q, d).cuda()
                 u = u_flat.view(-1, channel, h, w)
 
@@ -113,14 +118,35 @@ class SGES:
             
                 self.random_loss.append(torch.min(loss_tmp_plus, loss_tmp_minus))
                 global_grad.append(u_flat * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / self.sigma ** 2 / 2)
-
+                
             grad_est = u_flat * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / (2 * self.q * self.sigma ** 2)
             grad_est = grad_est.view(batch_size, self.q, d).sum(1, keepdim=True).view(batch_size,d)
-            global_grad = np.mean(np.asarray(global_grad), axis=0)
-            sub_grad = np.mean(np.asarray(sub_grad), axis=0)
+            
+            if len(self.grad_loss) > 0:
+                grad_loss_tensor = torch.cat(self.grad_loss, dim=0)
+                mean_grad_loss = torch.mean(grad_loss_tensor, axis=0)
+            else:
+                mean_grad_loss = 10000
+            
+            if len(self.random_loss) > 0:
+                random_loss_tensor = torch.cat(self.random_loss, dim=0)
+                mean_random_loss = torch.mean(random_loss_tensor, axis=0)
+            else:
+                mean_random_loss = 10000
 
-            mean_grad_loss = 10000 if grad_loss is None else np.mean(np.asarray(grad_loss))
-            mean_random_loss = 10000 if random_loss is None else np.mean(np.asarray(random_loss))
+        return grad_est, global_grad, sub_grad, mean_grad_loss, mean_random_loss
+
+    def run(self, inputs, loss_fn):
+        batch_size = inputs.size()[0]
+        channel = inputs.size()[1]
+        h = inputs.size()[2]
+        w = inputs.size()[3]
+        d = channel * h * w
+        
+        if self.U == None:
+            grad_est, global_grad, sub_grad, mean_grad_loss, mean_random_loss = self.sges_compute_grads(inputs, loss_fn, 0.0)
+        else:
+            grad_est, global_grad, sub_grad, mean_grad_loss, mean_random_loss = self.sges_compute_grads(inputs, loss_fn, self.alpha)
         
         self.surg_grads.pop(0) if self.surg_grads else self.surg_grads
         self.surg_grads.append(grad_est)
