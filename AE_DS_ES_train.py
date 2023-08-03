@@ -183,6 +183,7 @@ def main():
     requires_grad_(clf, False)
 
     # --------------------- Model to be trained ------------------------
+    
     if args.optimizer == 'Adam':
         if args.train_method =='part':
             optimizer = Adam(denoiser.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -351,6 +352,30 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
     denoiser.train()
     classifier.eval()
 
+    class loss_fn:
+        def __init__(self, criterion, classifier):
+            self.classifier = classifier
+            self.criterion = criterion
+        
+        def set_target(self, targets):
+            self.targets = targets
+        
+        def __call__(self, inputs_q):
+            inputs_q_pre = self.classifier(inputs_q)
+            loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
+            return loss_tmp_plus
+
+    if args.zo_method =='GES':
+        med = GES(args.q, 0.01, 0.005)
+        loss_fn = loss_fn(criterion, classifier)
+    elif args.zo_method =='SGES':
+        med = SGES(args.q, 0.01, 0.005, True)
+        loss_fn = loss_fn(criterion, classifier)
+    elif args.zo_method =='CMA_ES':
+        med = CMA_ES(args.q, 0.01, 0.005)
+        loss_fn = loss_fn(criterion, classifier)
+        
+    from tqdm import tqdm
     for i, (inputs, targets) in enumerate(loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -425,6 +450,20 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
 
                 # reconstructed image * gradient estimation   <--   g(x) * a
                 loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
+            
+            else:
+                recon_pre = classifier(recon)  # (batch_size, 10)
+                loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                loss_0_mean = loss_0.mean()
+                losses.update(loss_0_mean.item(), inputs.size(0))
+                if recon.shape[0] != args.batch:
+                    continue
+                targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)
+                loss_fn.set_target(targets_)
+                grad_est_no_grad, recon_flat = med.run(recon, loss_fn)
+
+                # reconstructed image * gradient estimation   <--   g(x) * a
+                loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -565,6 +604,9 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
         loss_fn = loss_fn(criterion, classifier, decoder)
     elif args.zo_method =='SGES':
         med = SGES(args.q, 0.01, 0.005, True)
+        loss_fn = loss_fn(criterion, classifier, decoder)
+    elif args.zo_method =='CMA_ES':
+        med = CMA_ES(args.q, 0.01, 0.005)
         loss_fn = loss_fn(criterion, classifier, decoder)
         
     from tqdm import tqdm
