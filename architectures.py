@@ -11,9 +11,11 @@ from archs.mnist_resnet import MnistResNet101 as resnet101_mnist
 from archs.memnet import MemNet
 from archs.wrn import WideResNet
 from archs.stl_resnet import STL10_ResNet18
+from archs.unet import build_unet
 from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
+from torch.nn import nn
 #from archs.vrnet import VariationalNetwork
 
 import torch
@@ -65,6 +67,23 @@ AUTOENCODER_ARCHITECTURES = ['cifar_encoder_48','cifar_decoder_48',
                              'stl_encoder', 'stl_decoder',
                              'mnist_dim_encoder', 'mnist_dim_decoder'
                              ]
+
+def get_segmentation_model(device: bool=True) -> torch.nn.Module:
+    args = {
+        'config': 'configs/unet/unet-s5-d16_fcn_4xb4-160k_cityscapes-512x1024.py',
+        'checkpoint': 'ckpt/fcn_unet_s5-d16_4x4_512x1024_160k_cityscapes_20211210_145204-6860854e.pth',
+        'work_dir': None,
+        'out': './',
+        'show': False,
+        'show_dir': None,
+        'wait_time': 2,
+        'cfg_options': None,
+        'launcher': 'none',
+        'tta': False,
+        'local_rank': 0
+    }
+    model = build_unet(args).to(device)
+    return model
 
 
 def get_architecture(arch: str, dataset: str, pytorch_pretrained: bool=False) -> torch.nn.Module:

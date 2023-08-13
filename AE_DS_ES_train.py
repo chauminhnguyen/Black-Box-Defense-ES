@@ -1,5 +1,5 @@
 from typing import Any
-from architectures import DENOISERS_ARCHITECTURES, get_architecture, IMAGENET_CLASSIFIERS, AUTOENCODER_ARCHITECTURES
+from architectures import DENOISERS_ARCHITECTURES, get_architecture, get_segmentation_model, IMAGENET_CLASSIFIERS, AUTOENCODER_ARCHITECTURES
 from datasets import get_dataset, DATASETS
 from torch.nn import MSELoss, CrossEntropyLoss
 from torch.optim import SGD, Optimizer, Adam
@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 # Training Objective
 parser.add_argument('--train_objective', default='classification', type=str,
                     help="The whole model is built for classificaiton / reconstruction",
-                    choices=['classification', 'reconstruction'])
+                    choices=['classification', 'reconstruction', 'segmentation'])
 parser.add_argument('--ground_truth', default='original_output', type=str,
                     help="The choice of groundtruth",
                     choices=['original_output', 'labels'])
@@ -176,9 +176,14 @@ def main():
             decoder = get_architecture(args.decoder_arch, args.dataset)
 
     # c) Classifier / Reconstructor
-    checkpoint = torch.load(args.classifier)
-    clf = get_architecture(checkpoint['arch'], args.dataset)
-    clf.load_state_dict(checkpoint['state_dict'])
+    if args.train_objective == 'segmentation':
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        clf = get_segmentation_model(device)
+        
+    else:
+        checkpoint = torch.load(args.classifier)
+        clf = get_architecture(checkpoint['arch'], args.dataset)
+        clf.load_state_dict(checkpoint['state_dict'])
     clf.cuda().eval()
     requires_grad_(clf, False)
 
@@ -208,12 +213,15 @@ def main():
     elif args.train_objective == 'reconstruction':
         init_logfile(logfilename,
                      "epoch\ttime\tlr\ttrain_stab_loss\tClean_TestLoss_NoDenoiser\tSmoothed_Clean_TestLoss_NoDenoiser\tClean_TestLoss\tSmoothed_Clean_TestLoss\tNoDenoiser_AdvLoss\tSmoothed_NoDenoiser_AdvLoss\tAdv_Loss\tSmoothed_AdvLoss")
-
+    
     # --------------------- Objective function ---------------------
     if args.train_objective == 'classification':
         criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
     elif args.train_objective == 'reconstruction':
         criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
+    elif args.train_objective == 'segmentation':
+        criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
+        criterion = CrossEntropyLoss().cuda()
 
     # --------------------- Start Training -------------------------------
     best_acc = 0
@@ -274,6 +282,35 @@ def main():
                         epoch, after - before,
                         args.lr, stab_train_loss, test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth,
                         recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
+        elif args.train_objective == 'segmentation':
+            if args.model_type == 'AE_DS':
+                stab_train_loss = recon_train_ae(train_loader, encoder, decoder, denoiser, criterion, optimizer, epoch,
+                                        args.noise_sd, clf)
+                test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth, recon_loss, recon_loss_smooth, adv_loss, smooth_loss = test_with_recon_ae(
+                    test_loader, encoder, decoder, denoiser, criterion, args.outdir, args.noise_sd, epoch,
+                    args.visual_freq, args.noise_num,
+                    args.num_steps, args.epsilon, args.print_freq, clf)
+
+                log(logfilename,
+                    "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                        epoch, after - before,
+                        args.lr, stab_train_loss, test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth,
+                        recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
+
+            elif args.model_type == 'DS':
+                stab_train_loss = recon_train(train_loader, denoiser, criterion, optimizer, epoch,
+                                                 args.noise_sd, clf)
+                test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth, recon_loss, recon_loss_smooth, adv_loss, smooth_loss = test_with_recon(
+                    test_loader, denoiser, criterion, args.outdir, args.noise_sd, epoch,
+                    args.visual_freq, args.noise_num,
+                    args.num_steps, args.epsilon, args.print_freq, clf)
+
+                log(logfilename,
+                    "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                        epoch, after - before,
+                        args.lr, stab_train_loss, test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth,
+                        recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
+
 
         scheduler.step(epoch)
         args.lr = scheduler.get_lr()[0]
