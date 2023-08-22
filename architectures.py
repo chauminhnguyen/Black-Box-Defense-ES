@@ -15,7 +15,6 @@ from archs.unet import build_unet
 from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
-from torch.nn import nn
 #from archs.vrnet import VariationalNetwork
 
 import torch
