@@ -19,6 +19,10 @@ import copy
 import json
 from torchvision.transforms import ToTensor
 
+from mmseg.datasets import CityscapesDataset
+from mmengine.registry import init_default_scope
+init_default_scope('mmseg')
+
 
 
 # set this environment variable to the location of your imagenet directory if you want to read ImageNet data.
@@ -27,7 +31,7 @@ from torchvision.transforms import ToTensor
 IMAGENET_LOC_ENV = "IMAGENET_DIR"
 
 # list of all datasets
-DATASETS = ["imagenet", "imagenet32", "cifar10", "mnist", "stl10", "restricted_imagenet"]
+DATASETS = ["imagenet", "imagenet32", "cifar10", "mnist", "stl10", "restricted_imagenet", "cityscapes"]
 
 img_to_tensor = ToTensor()
 
@@ -44,6 +48,9 @@ def get_dataset(dataset: str, split: str) -> Dataset:
 
     elif dataset == "stl10":
         return _stl10(split)
+    
+    elif dataset == "cityscapes":
+        return _cityscapes(split)
 
 
 def get_num_classes(dataset: str):
@@ -92,6 +99,18 @@ _MNIST_STDDEV = [0.4898408]
 _STL10_MEAN = [1.7776489e-07, -3.6621095e-08, -9.346008e-09]
 _STL10_STDDEV = [1.0, 1.0, 1.0]
 
+
+
+def _cityscapes(split: str) -> Dataset:
+    dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+    if split == "train":
+        return Cityscapes(dataset_path, split='train', download=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(p=0.5),transforms.RandomVerticalFlip(p=0.5),transforms.ToTensor()]))
+    elif split == "val":
+        return Cityscapes(dataset_path, split='val', download=True, transform=transforms.ToTensor())
+    elif split == "test":
+        return Cityscapes(dataset_path, split='test', download=True, transform=transforms.ToTensor())
+    else:
+        raise Exception("Unknown split name.")
 
 
 def _stl10(split: str) -> Dataset:
@@ -308,9 +327,42 @@ class ImageNetDS(Dataset):
         return True
 
 
+class Cityscapes(Dataset):
+    def __init__(self, root, split='train', bacth_size=1, transform=None, target_transform=None):
+        self.batch_size = bacth_size
+        data_prefix=dict(img_path='leftImg8bit/' + split, seg_map_path='gtFine/' + split)
+        test_pipeline = [
+            dict(type='LoadImageFromFile'),
+            dict(type='Resize', scale=(512, 1024), keep_ratio=True),
+            # add loading annotation after ``Resize`` because ground truth
+            # does not need to do resize data transform
+            dict(type='LoadAnnotations'),
+            dict(type='PackSegInputs')
+        ]
 
+        dataset = CityscapesDataset(data_root=root, data_prefix=data_prefix, test_mode=True, pipeline=test_pipeline, seg_map_suffix='_gtFine_labelIds.png')
+        def collate_fn(data):
+            input_batch = []
+            label_batch = []
+            for ele in data:
+                input_batch.append(ele['inputs'].to(torch.float32))
+                label_batch.append(ele['data_samples'].gt_sem_seg.data)
 
+            input_batch = torch.utils.data.dataloader.default_collate(input_batch)
+            label_batch = torch.utils.data.dataloader.default_collate(label_batch)
+            return input_batch, label_batch
+
+        self.data_loader = DataLoader(dataset=dataset, collate_fn=collate_fn, batch_size=self.batch_size)
+        
+
+    def __getitem__(self, index):
+        item = self.data_loader[index]
+        images, targets = item
+        return images, targets
+
+    def __len__(self):
+        return len(self.data_loader)
+    
 if __name__ == "__main__":
-    dataset = get_dataset('imagenet32', 'train')
-    embed()
-
+    dataset = get_dataset('cityscapes', 'train')
+    

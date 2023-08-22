@@ -126,7 +126,7 @@ def main():
     pin_memory = (args.dataset == "imagenet")
 
     # --------------------- Dataset Loading ----------------------
-    if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist':
+    if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist' or args.dataset == 'cityscapes':
         train_dataset = get_dataset(args.dataset, 'train')
         test_dataset = get_dataset(args.dataset, 'test')
 
@@ -134,7 +134,7 @@ def main():
                                   num_workers=args.workers, pin_memory=pin_memory)
         test_loader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch,
                                  num_workers=args.workers, pin_memory=pin_memory)
-
+    
     elif args.dataset == 'restricted_imagenet':
         in_path = '/localscratch2/damondemon/datasets/imagenet'
         in_info_path = '/localscratch2/damondemon/datasets/imagenet_info'
@@ -220,8 +220,8 @@ def main():
     elif args.train_objective == 'reconstruction':
         criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
     elif args.train_objective == 'segmentation':
-        criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
-        criterion = CrossEntropyLoss().cuda()
+        # criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
+        criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
 
     # --------------------- Start Training -------------------------------
     best_acc = 0
