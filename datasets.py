@@ -49,8 +49,8 @@ def get_dataset(dataset: str, split: str) -> Dataset:
     elif dataset == "stl10":
         return _stl10(split)
     
-    elif dataset == "cityscapes":
-        return _cityscapes(split)
+    # elif dataset == "cityscapes":
+    #     return _cityscapes(split)
 
 
 def get_num_classes(dataset: str):
@@ -101,16 +101,16 @@ _STL10_STDDEV = [1.0, 1.0, 1.0]
 
 
 
-def _cityscapes(split: str) -> Dataset:
-    dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
-    if split == "train":
-        return Cityscapes(dataset_path, split='train', download=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(p=0.5),transforms.RandomVerticalFlip(p=0.5),transforms.ToTensor()]))
-    elif split == "val":
-        return Cityscapes(dataset_path, split='val', download=True, transform=transforms.ToTensor())
-    elif split == "test":
-        return Cityscapes(dataset_path, split='test', download=True, transform=transforms.ToTensor())
-    else:
-        raise Exception("Unknown split name.")
+# def _cityscapes(split: str, batch_size: int) -> Dataset:
+#     dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+#     if split == "train":
+#         return Cityscapes(dataset_path, split='train', batch_size=bacth_size, transform=transforms.Compose([transforms.RandomHorizontalFlip(p=0.5),transforms.RandomVerticalFlip(p=0.5),transforms.ToTensor()]))
+#     elif split == "val":
+#         return Cityscapes(dataset_path, split='val', batch_size=bacth_size, transform=transforms.ToTensor())
+#     elif split == "test":
+#         return Cityscapes(dataset_path, split='test', batch_size=bacth_size, transform=transforms.ToTensor())
+#     else:
+#         raise Exception("Unknown split name.")
 
 
 def _stl10(split: str) -> Dataset:
@@ -328,7 +328,7 @@ class ImageNetDS(Dataset):
 
 
 class Cityscapes(Dataset):
-    def __init__(self, root, split='train', bacth_size=1, transform=None, target_transform=None):
+    def __init__(self, root, split='train', bacth_size=64, transform=None, target_transform=None):
         self.batch_size = bacth_size
         data_prefix=dict(img_path='leftImg8bit/' + split, seg_map_path='gtFine/' + split)
         test_pipeline = [

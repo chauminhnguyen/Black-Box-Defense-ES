@@ -1,6 +1,6 @@
 from typing import Any
 from architectures import DENOISERS_ARCHITECTURES, get_architecture, get_segmentation_model, IMAGENET_CLASSIFIERS, AUTOENCODER_ARCHITECTURES
-from datasets import get_dataset, DATASETS
+from datasets import get_dataset, DATASETS, Cityscapes
 from torch.nn import MSELoss, CrossEntropyLoss
 from torch.optim import SGD, Optimizer, Adam
 from torch.optim.lr_scheduler import StepLR, MultiStepLR
@@ -19,8 +19,7 @@ from robustness.tools.imagenet_helpers import common_superclass_wnid, ImageNetHi
 from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
 from es import GES, SGES
-from torch.nn.utils import parameters_to_vector, vector_to_parameters
-import numpy as np
+from torchvision import transforms
 
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -126,7 +125,7 @@ def main():
     pin_memory = (args.dataset == "imagenet")
 
     # --------------------- Dataset Loading ----------------------
-    if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist' or args.dataset == 'cityscapes':
+    if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist':
         train_dataset = get_dataset(args.dataset, 'train')
         test_dataset = get_dataset(args.dataset, 'test')
 
@@ -134,6 +133,19 @@ def main():
                                   num_workers=args.workers, pin_memory=pin_memory)
         test_loader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch,
                                  num_workers=args.workers, pin_memory=pin_memory)
+    
+    elif args.dataset == 'cityscapes':
+        dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+        train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
+                                        transforms.RandomVerticalFlip(p=0.5), \
+                                        transforms.ToTensor()])
+        
+        test_transform = transforms.Compose([transforms.ToTensor()])
+
+        train_dataset = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
+
+        test_dataset = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
+        
     
     elif args.dataset == 'restricted_imagenet':
         in_path = '/localscratch2/damondemon/datasets/imagenet'
