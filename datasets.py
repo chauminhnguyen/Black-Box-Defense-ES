@@ -327,7 +327,7 @@ class ImageNetDS(Dataset):
         return True
 
 
-class Cityscapes(Dataset):
+class Cityscapes():
     def __init__(self, root, split='train', batch_size=64, transform=None, target_transform=None):
         self.batch_size = batch_size
         data_prefix=dict(img_path='leftImg8bit/' + split, seg_map_path='gtFine/' + split)
@@ -352,17 +352,6 @@ class Cityscapes(Dataset):
             label_batch = torch.utils.data.dataloader.default_collate(label_batch)
             return input_batch, label_batch
 
-        self.data_loader = DataLoader(dataset=dataset, collate_fn=collate_fn, batch_size=self.batch_size)
-        
-
-    def __getitem__(self, index):
-        item = self.data_loader[index]
-        images, targets = item
-        return images, targets
-
-    def __len__(self):
-        return len(self.data_loader)
-    
-if __name__ == "__main__":
-    dataset = get_dataset('cityscapes', 'train')
+        data_loader = DataLoader(dataset=dataset, collate_fn=collate_fn, batch_size=self.batch_size)
+        return data_loader
     
