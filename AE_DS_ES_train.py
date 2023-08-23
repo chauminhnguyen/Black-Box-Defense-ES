@@ -143,9 +143,11 @@ def main():
         
         test_transform = transforms.Compose([transforms.ToTensor()])
 
-        train_loader = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
+        temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
+        train_loader = temp.build_data()
 
-        test_loader = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
+        temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
+        test_loader = temp.build_data()
         
     
     elif args.dataset == 'restricted_imagenet':
@@ -197,7 +199,7 @@ def main():
         clf = get_architecture(checkpoint['arch'], args.dataset)
         clf.load_state_dict(checkpoint['state_dict'])
         clf.cuda().eval()
-    requires_grad_(clf, False)
+        requires_grad_(clf, False)
 
     # --------------------- Model to be trained ------------------------
     
@@ -1015,7 +1017,7 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
     # switch to train mode
     denoiser.train()
     if recon_net:
-        if args.train_objective is not 'segmentation':
+        if args.train_objective != 'segmentation':
             recon_net.eval()
 
     for i, (img_original, _) in enumerate(loader):

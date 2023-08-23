@@ -352,6 +352,8 @@ class Cityscapes():
             label_batch = torch.utils.data.dataloader.default_collate(label_batch)
             return input_batch, label_batch
 
-        data_loader = DataLoader(dataset=dataset, collate_fn=collate_fn, batch_size=self.batch_size)
-        return data_loader
-    
+        self.data_loader = DataLoader(dataset=dataset, collate_fn=collate_fn, batch_size=self.batch_size)
+        
+
+    def build_data(self):
+        return self.data_loader    
