@@ -80,7 +80,7 @@ def get_segmentation_model(device: bool=True) -> torch.nn.Module:
         'launcher': 'none',
         'tta': False,
         'local_rank': 0,
-        'device': args.device
+        'device': device
     }
     model = build_unet(args).to(device)
     return model
