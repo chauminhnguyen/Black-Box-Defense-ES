@@ -328,8 +328,8 @@ class ImageNetDS(Dataset):
 
 
 class Cityscapes(Dataset):
-    def __init__(self, root, split='train', bacth_size=64, transform=None, target_transform=None):
-        self.batch_size = bacth_size
+    def __init__(self, root, split='train', batch_size=64, transform=None, target_transform=None):
+        self.batch_size = batch_size
         data_prefix=dict(img_path='leftImg8bit/' + split, seg_map_path='gtFine/' + split)
         test_pipeline = [
             dict(type='LoadImageFromFile'),

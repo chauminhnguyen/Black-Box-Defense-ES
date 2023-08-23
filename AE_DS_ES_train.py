@@ -135,7 +135,8 @@ def main():
                                  num_workers=args.workers, pin_memory=pin_memory)
     
     elif args.dataset == 'cityscapes':
-        dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+        # dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+        dataset_path = "/content/mmsegmentation/data/cityscapes"
         train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
                                         transforms.RandomVerticalFlip(p=0.5), \
                                         transforms.ToTensor()])
