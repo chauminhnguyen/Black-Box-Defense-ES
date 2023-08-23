@@ -2,9 +2,9 @@
 import torch
 from mmseg.apis import MMSegInferencer
 
-def build_unet(args):
+def build_unet(device):
     model_name = 'deeplabv3plus_r18-d8_4xb2-80k_cityscapes-512x1024'
-    model = UNet(model_name, args.device)
+    model = UNet(model_name, device)
     return model
 
 class UNet():

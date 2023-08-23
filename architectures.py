@@ -68,21 +68,7 @@ AUTOENCODER_ARCHITECTURES = ['cifar_encoder_48','cifar_decoder_48',
                              ]
 
 def get_segmentation_model(device: str) -> torch.nn.Module:
-    args = {
-        'config': 'configs/unet/unet-s5-d16_fcn_4xb4-160k_cityscapes-512x1024.py',
-        'checkpoint': 'ckpt/fcn_unet_s5-d16_4x4_512x1024_160k_cityscapes_20211210_145204-6860854e.pth',
-        'work_dir': None,
-        'out': './',
-        'show': False,
-        'show_dir': None,
-        'wait_time': 2,
-        'cfg_options': None,
-        'launcher': 'none',
-        'tta': False,
-        'local_rank': 0,
-        'device': device
-    }
-    model = build_unet(args)
+    model = build_unet(device)
     return model
 
 
