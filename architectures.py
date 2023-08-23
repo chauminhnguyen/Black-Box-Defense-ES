@@ -67,8 +67,8 @@ AUTOENCODER_ARCHITECTURES = ['cifar_encoder_48','cifar_decoder_48',
                              'mnist_dim_encoder', 'mnist_dim_decoder'
                              ]
 
-def get_segmentation_model() -> torch.nn.Module:
-    model = build_unet()
+def get_segmentation_model(device: str) -> torch.nn.Module:
+    model = build_unet(device)
     return model
 
 

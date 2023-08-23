@@ -2,14 +2,14 @@
 import torch
 from mmseg.apis import MMSegInferencer
 
-def build_unet():
+def build_unet(device):
     model_name = 'unet-s5-d16_fcn_4xb4-160k_cityscapes-512x1024'
-    model = UNet(model_name)
+    model = UNet(model_name, device)
     return model
 
 class UNet():
-    def __init__(self, model_name) -> None:
-        self.inferencer = MMSegInferencer(model=model_name)
+    def __init__(self, model_name, device) -> None:
+        self.inferencer = MMSegInferencer(model=model_name, device=device)
         # self.model = init_model(config_path, checkpoint_path, device=device)
     
     def __call__(self, images):
