@@ -67,7 +67,7 @@ AUTOENCODER_ARCHITECTURES = ['cifar_encoder_48','cifar_decoder_48',
                              'mnist_dim_encoder', 'mnist_dim_decoder'
                              ]
 
-def get_segmentation_model(device: bool=True) -> torch.nn.Module:
+def get_segmentation_model(device: str) -> torch.nn.Module:
     args = {
         'config': 'configs/unet/unet-s5-d16_fcn_4xb4-160k_cityscapes-512x1024.py',
         'checkpoint': 'ckpt/fcn_unet_s5-d16_4x4_512x1024_160k_cityscapes_20211210_145204-6860854e.pth',
@@ -82,7 +82,7 @@ def get_segmentation_model(device: bool=True) -> torch.nn.Module:
         'local_rank': 0,
         'device': device
     }
-    model = build_unet(args).to(device)
+    model = build_unet(args)
     return model
 
 
