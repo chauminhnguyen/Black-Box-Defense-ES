@@ -2,14 +2,14 @@
 import torch
 from mmseg.apis import MMSegInferencer
 
-def build_unet(device):
+def build_unet():
     model_name = 'deeplabv3plus_r18-d8_4xb2-80k_cityscapes-512x1024'
-    model = UNet(model_name, device)
+    model = UNet(model_name)
     return model
 
 class UNet():
-    def __init__(self, model_name, device) -> None:
-        self.inferencer = MMSegInferencer(model=model_name).to(device)
+    def __init__(self, model_name) -> None:
+        self.inferencer = MMSegInferencer(model=model_name)
         # self.model = init_model(config_path, checkpoint_path, device=device)
     
     def __call__(self, images):

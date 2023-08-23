@@ -190,8 +190,7 @@ def main():
 
     # c) Classifier / Reconstructor
     if args.train_objective == 'segmentation':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        clf = get_segmentation_model(device)
+        clf = get_segmentation_model()
         
     else:
         checkpoint = torch.load(args.classifier)
