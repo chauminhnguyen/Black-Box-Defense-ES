@@ -13,7 +13,7 @@ class UNet():
         # self.model = init_model(config_path, checkpoint_path, device=device)
     
     def __call__(self, images):
-        images = images.permute(0,2,3,1).numpy()
+        images = list(images.permute(0,2,3,1).cpu().numpy())
         # segDataSample = inference_model(model=self.model, img=images)
         # result = show_result_pyplot(self.model, images, segDataSample)
         result = self.inferencer(images, show=False)
