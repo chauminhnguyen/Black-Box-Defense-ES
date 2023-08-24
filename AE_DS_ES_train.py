@@ -1075,7 +1075,7 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
                 original_recon = recon_net(img)
 
                 recon_test = recon_net(recon)
-                loss_0 = criterion(recon_test, original_recon)
+                loss_0 = criterion(recon_test.float(), original_recon.float())
                 # record original loss
                 loss_0_mean = loss_0.mean()
                 losses.update(loss_0_mean.item(), img_original.size(0))
