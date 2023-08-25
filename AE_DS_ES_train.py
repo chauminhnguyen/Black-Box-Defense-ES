@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import StepLR, MultiStepLR
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToPILImage
 from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
+import torch.nn.functional as F
 
 import argparse
 from datetime import datetime
@@ -231,12 +232,12 @@ def main():
     
     # --------------------- Objective function ---------------------
     if args.train_objective == 'classification':
-        criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
     elif args.train_objective == 'reconstruction':
-        criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
+        criterion = MSELoss(size_average=None, reduce=None, reduction='none')
     elif args.train_objective == 'segmentation':
         # criterion = MSELoss(size_average=None, reduce=None, reduction='none').cuda()
-        criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        criterion = CrossEntropyLoss()
 
     # --------------------- Start Training -------------------------------
     best_acc = 0
@@ -1075,7 +1076,9 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
                 original_recon = recon_net(img)
 
                 recon_test = recon_net(recon)
-                loss_0 = criterion(recon_test.float(), original_recon.float())
+
+                recon_test = F.one_hot(recon_test, num_classes=35).permute(0,3,1,2)
+                loss_0 = criterion(recon_test.float(), original_recon.long())
                 # record original loss
                 loss_0_mean = loss_0.mean()
                 losses.update(loss_0_mean.item(), img_original.size(0))
