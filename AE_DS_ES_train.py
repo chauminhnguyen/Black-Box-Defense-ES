@@ -1076,8 +1076,12 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
                 original_recon = recon_net(img)
 
                 recon_test = recon_net(recon)
+                if batch_size == 1:
+                    recon_test = recon_test.unsqueeze(0)
+                    original_recon = original_recon.unsqueeze(0)
 
                 recon_test = F.one_hot(recon_test, num_classes=35).permute(0,3,1,2)
+
                 loss_0 = criterion(recon_test.float(), original_recon.long())
                 # record original loss
                 loss_0_mean = loss_0.mean()
