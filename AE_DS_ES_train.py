@@ -300,33 +300,28 @@ def main():
                         recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
         elif args.train_objective == 'segmentation':
             if args.model_type == 'AE_DS':
-                stab_train_loss = recon_train_ae(train_loader, encoder, decoder, denoiser, criterion, optimizer, epoch,
-                                        args.noise_sd, clf)
-                test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth, recon_loss, recon_loss_smooth, adv_loss, smooth_loss = test_with_recon_ae(
-                    test_loader, encoder, decoder, denoiser, criterion, args.outdir, args.noise_sd, epoch,
-                    args.visual_freq, args.noise_num,
-                    args.num_steps, args.epsilon, args.print_freq, clf)
-
-                log(logfilename,
-                    "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
-                        epoch, after - before,
-                        args.lr, stab_train_loss, test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth,
-                        recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
-
+                train_loss = train_ae(train_loader, encoder, decoder, denoiser, criterion, optimizer, epoch,
+                                      args.noise_sd,
+                                      clf)
+                _, train_acc = test_with_classifier_ae(train_loader, encoder, decoder, denoiser, criterion,
+                                                       args.noise_sd,
+                                                       args.print_freq, clf)
+                test_loss, test_acc = test_with_classifier_ae(test_loader, encoder, decoder, denoiser, criterion,
+                                                              args.noise_sd,
+                                                              args.print_freq, clf)
             elif args.model_type == 'DS':
-                stab_train_loss = recon_train(train_loader, denoiser, criterion, optimizer, epoch,
-                                                 args.noise_sd, clf)
-                test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth, recon_loss, recon_loss_smooth, adv_loss, smooth_loss = test_with_recon(
-                    test_loader, denoiser, criterion, args.outdir, args.noise_sd, epoch,
-                    args.visual_freq, args.noise_num,
-                    args.num_steps, args.epsilon, args.print_freq, clf)
+                train_loss = train(train_loader, denoiser, criterion, optimizer, epoch, args.noise_sd,
+                                   clf)
+                _, train_acc = test_with_classifier(train_loader, denoiser, criterion, args.noise_sd,
+                                                    args.print_freq, clf)
+                test_loss, test_acc = test_with_classifier(test_loader, denoiser, criterion,
+                                                           args.noise_sd,
+                                                           args.print_freq, clf)
+            after = time.time()
 
-                log(logfilename,
-                    "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
-                        epoch, after - before,
-                        args.lr, stab_train_loss, test_no_loss, test_no_loss_smooth, test_loss, test_loss_smooth,
-                        recon_loss, recon_loss_smooth, adv_loss, smooth_loss))
-
+            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                epoch, after - before,
+                args.lr, train_loss, test_loss, train_acc, test_acc))
 
         scheduler.step(epoch)
         args.lr = scheduler.get_lr()[0]
@@ -403,7 +398,10 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
 
     # switch to train mode
     denoiser.train()
-    classifier.eval()
+    # classifier.eval()
+    if classifier:
+        if args.train_objective != 'segmentation':
+            classifier.eval()
 
     class loss_fn:
         def __init__(self, criterion, classifier):
