@@ -842,63 +842,6 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
                 # reconstructed image * gradient estimation   <--   g(x) * a
                 loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
 
-            # elif args.zo_method =='GES2':
-            #     batch_size = recon.size()[0]
-            #     a = sigma * np.sqrt(alpha / d)
-            #     c = sigma * np.sqrt((1 - alpha) / batch_size)
-
-            #     # for i in range(pop_size):
-            #     if alpha > 0.5:
-            #         # noise = a * np.random.randn(1, len(x))
-            #         u_flat = a * torch.rand(batch_size, args.q, d)
-            #         alpha = 1
-            #     else:
-            #         # noise = a * np.random.randn(1, len(x)) + c * np.random.randn(1, k) @ U.T
-            #         u_flat = a * torch.rand(batch_size, args.q, d).cuda() + c * torch.rand(1, batch_size).cuda() @ U.T
-                
-            #     # u_flat = u_flat.reshape(inputs.shape).cuda()
-            #     # u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * args.q, d)
-            #     u_flat = u_flat.view(batch_size * args.q, d).cuda()
-            #     u = u_flat.view(-1, channel, h, w)
-
-            #     with torch.no_grad():
-            #         mu = torch.tensor(args.mu).cuda()
-
-            #         recon_pre = classifier(decoder(recon))  # (batch_size, 10)
-            #         loss_0 = criterion(recon_pre, targets)  # (batch_size )
-            #         loss_0_mean = loss_0.mean()
-            #         losses.update(loss_0_mean.item(), inputs.size(0))
-
-            #         # Repeat q times
-            #         targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)  # (batch_size * q, )
-
-            #         recon_q = recon.repeat((1, args.q, 1, 1)).view(-1, channel, h, w) # batch_size * q, channel, h, w
-            #         recon_q_plus = recon_q + mu * u
-            #         recon_q_minus = recon_q - mu * u
-
-            #         # Black-Box Query
-            #         recon_q_pre_plus = classifier(decoder(recon_q_plus))
-            #         recon_q_pre_minus = classifier(decoder(recon_q_minus))
-            #         loss_tmp_plus = criterion(recon_q_pre_plus, targets_)
-            #         loss_tmp_minus = criterion(recon_q_pre_minus, targets_)
-
-            #         loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
-                    
-            #         grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
-            #         grad_est = grad_est.view(batch_size, args.q, d).sum(1, keepdim=True).view(batch_size,d) / (2 * args.q * sigma ** 2)
-            #         surg_grads.pop(0) if surg_grads else surg_grads
-            #         surg_grads.append(grad_est)
-
-            #     surg_grads_tensor = torch.cat(surg_grads, dim=0)
-            #     # surg_grads_tensor = torch.sum(surg_grads_tensor, dim=0).unsqueeze(0)
-            #     U, _ = torch.linalg.qr(surg_grads_tensor.T)
-
-            #     recon_flat = torch.flatten(recon, start_dim=1).cuda()
-            #     grad_est_no_grad = grad_est.detach()
-
-            #     # reconstructed image * gradient estimation   <--   g(x) * a
-            #     loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
-
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
@@ -1106,8 +1049,14 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
                     recon_q_pre_minus = recon_net(recon_q_minus)
 
                     # Loss Calculation and Gradient Estimation
-                    loss_tmp_plus = criterion(recon_q_pre_plus, original_recon)
-                    loss_tmp_minus = criterion(recon_q_pre_minus, original_recon)
+                    if batch_size == 1:
+                        recon_q_pre_plus = recon_test.unsqueeze(0)
+                        recon_q_pre_minus = original_recon.unsqueeze(0)
+                    recon_q_pre_plus = F.one_hot(recon_q_pre_plus, num_classes=35).permute(0,3,1,2)
+                    recon_q_pre_minus = F.one_hot(recon_q_pre_minus, num_classes=35).permute(0,3,1,2)
+
+                    loss_tmp_plus = criterion(recon_q_pre_plus.float(), original_recon.long())
+                    loss_tmp_minus = criterion(recon_q_pre_minus.float(), original_recon.long())
 
                     loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
                     loss_diff = loss_diff.mean(3, keepdim=True).mean(2, keepdim=True)
