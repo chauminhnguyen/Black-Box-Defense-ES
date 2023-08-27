@@ -7,7 +7,7 @@ from architectures import DENOISERS_ARCHITECTURES, get_architecture
 from torch.nn import MSELoss
 import time
 from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
-from es import Adapter
+from es2 import Adapter
 from tqdm import tqdm
 import os
 

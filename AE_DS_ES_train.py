@@ -428,6 +428,8 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
         
     from tqdm import tqdm
     for i, (inputs, targets) in enumerate(loader):
+        print('======================================')
+        print(inputs.shape, targets.shape)
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -504,7 +506,7 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
             
             else:
                 recon_pre = classifier(recon)  # (batch_size, 10)
-                loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                loss_0 = criterion(recon_pre.float(), targets.long())  # (batch_size )
                 loss_0_mean = loss_0.mean()
                 losses.update(loss_0_mean.item(), inputs.size(0))
                 if recon.shape[0] != args.batch:

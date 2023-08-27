@@ -1,4 +1,4 @@
-from es import *
+from es2 import *
 
 class Adapter:
     def __init__(self, zo_method, q, loss_fn) -> None:
