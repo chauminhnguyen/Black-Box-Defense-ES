@@ -433,6 +433,10 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
         # measure data loading time
         data_time.update(time.time() - end)
 
+        if batch_size == 1:
+            inputs = inputs.unsqueeze(0)
+            targets = targets.unsqueeze(0)
+            
         inputs = inputs.cuda()
         targets = targets.cuda()
         if args.ground_truth == 'original_output':
@@ -472,7 +476,9 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                     original_pre = classifier(inputs).argmax(1).detach().clone()
 
                     recon_pre = classifier(recon)
-                    loss_0 = criterion(recon_pre, original_pre)
+                    # =====================================================================
+                    recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2)
+                    loss_0 = criterion(recon_pre.float(), original_pre.long())
 
                     # record original loss
                     loss_0_mean = loss_0.mean()
@@ -492,9 +498,11 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                         recon_q = recon_flat_no_grad + mu * u
                         recon_q = recon_q.view(batch_size, channel, h, w)
                         recon_q_pre = classifier(recon_q)
-
+                        # =====================================================================
+                        recon_pre = F.one_hot(recon_q_pre, num_classes=35).permute(0,3,1,2)
                         # Loss Calculation and Gradient Estimation
-                        loss_tmp = criterion(recon_q_pre, original_pre)
+                        
+                        loss_tmp = criterion(recon_q_pre.float(), original_pre.long())
                         loss_diff = torch.tensor(loss_tmp - loss_0)
                         grad_est = grad_est + (d / q) * u * loss_diff.reshape(batch_size, 1).expand_as(u) / mu
 

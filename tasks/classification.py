@@ -10,6 +10,7 @@ from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, re
 from es2 import Adapter
 from tqdm import tqdm
 import os
+import torch.nn as nn
 
 
 class Classification(BaseTask):
@@ -130,7 +131,8 @@ class Classification(BaseTask):
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model))
+        model = nn.Sequential(self.decoder, self.model)
+        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -159,7 +161,7 @@ class Classification(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
 
-                loss = self.es_adapter.run(recon, self.model)
+                loss = self.es_adapter.run(inputs, recon, self.model)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
@@ -217,7 +219,7 @@ class Classification(BaseTask):
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model))
+        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
