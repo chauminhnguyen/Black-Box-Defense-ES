@@ -432,10 +432,6 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
         print(inputs.shape, targets.shape)
         # measure data loading time
         data_time.update(time.time() - end)
-
-        if batch_size == 1:
-            inputs = inputs.unsqueeze(0)
-            targets = targets.unsqueeze(0)
             
         inputs = inputs.cuda()
         targets = targets.cuda()
@@ -464,6 +460,10 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
             h = recon.size()[2]
             w = recon.size()[3]
             d = channel * h * w
+
+            if batch_size == 1:
+                inputs = inputs.unsqueeze(0)
+                targets = targets.unsqueeze(0)
 
             # For DS model, only RGE could be exploited for ZO gradient estimation
             if args.zo_method == 'RGE':
