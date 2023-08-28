@@ -1,12 +1,11 @@
 from base import BaseTask
 from torch.utils.data import DataLoader
-from datasets import get_dataset, DATASETS
-from train_utils import build_opt
+from datasets import get_dataset
 import torch
-from architectures import DENOISERS_ARCHITECTURES, get_architecture, get_segmentation_model, IMAGENET_CLASSIFIERS, AUTOENCODER_ARCHITECTURES
+from architectures import get_architecture
 from torch.nn import CrossEntropyLoss
 import time
-from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
+from train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
 from es2 import Adapter
 from tqdm import tqdm
 import os
@@ -62,7 +61,7 @@ class Classification(BaseTask):
         self.model.cuda().eval()
         requires_grad_(self.model, False)
     
-    def train(self, args, train_loader):
+    def train(self, args):
         starting_epoch = 0
         logfilename = os.path.join(args.outdir, 'log.txt')
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
@@ -75,8 +74,8 @@ class Classification(BaseTask):
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
                 train_loss = self.train_denoiser(args, epoch)
-            _, train_acc = self.test_with_classifier(self.train_loader)
-            test_loss, test_acc = self.test_with_classifier(self.test_loader)
+            _, train_acc = self.eval(self.train_loader)
+            test_loss, test_acc = self.eval(self.test_loader)
             
             after = time.time()
 
@@ -267,7 +266,7 @@ class Classification(BaseTask):
                     data_time=data_time, loss=losses))
         return losses.avg
     
-    def test_with_classifier(self, loader):
+    def eval(self, loader):
         """
         A function to test the classification performance of a denoiser when attached to a given classifier
             :param loader:DataLoader: test dataloader

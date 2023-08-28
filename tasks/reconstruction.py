@@ -61,7 +61,7 @@ class Classification(BaseTask):
         self.model.cuda().eval()
         requires_grad_(self.model, False)
     
-    def train(self, args, train_loader):
+    def train(self, args):
         starting_epoch = 0
         logfilename = os.path.join(args.outdir, 'log.txt')
         init_logfile(logfilename,
@@ -82,7 +82,6 @@ class Classification(BaseTask):
 
             log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
                 epoch, after - before, args.lr, train_loss, test_loss, train_acc, test_acc))
-
 
     def train_denoiser_with_ae(self, epoch):
         """
@@ -172,14 +171,14 @@ class Classification(BaseTask):
                 recon.retain_grad()
 
                 with torch.no_grad():
-                    mu = torch.tensor(args.mu).cuda()
-                    q = torch.tensor(args.q).cuda()
+                    mu = torch.tensor(self.args.mu).cuda()
+                    q = torch.tensor(self.args.q).cuda()
 
                     # Forward Inference (Original)
                     original_recon = self.model(img)
 
-                    recon_test = self.model(decoder(recon))
-                    loss_0 = criterion(recon_test, original_recon)
+                    recon_test = self.model(self.decoder(recon))
+                    loss_0 = self.criterion(recon_test, original_recon)
                     # record original loss
                     loss_0_mean = loss_0.mean()
                     losses.update(loss_0_mean.item(), img_original.size(0))
@@ -199,8 +198,8 @@ class Classification(BaseTask):
 
                         recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
                         recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
-                        recon_q_pre_plus = recon_net(self.decoder(recon_q_plus))
-                        recon_q_pre_minus = recon_net(self.decoder(recon_q_minus))
+                        recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                        recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
 
                         # Loss Calculation and Gradient Estimation
                         loss_tmp_plus = self.criterion(recon_q_pre_plus, original_recon)
@@ -237,153 +236,10 @@ class Classification(BaseTask):
         return losses.avg
     
     def train_denoiser(self, epoch):
-        print("Training model for classification task")
-        """
-        Function for training denoiser for one epoch
-            :param loader:DataLoader: training dataloader
-            :param denoiser:torch.nn.Module: the denoiser being trained
-            :param criterion: loss function
-            :param optimizer:Optimizer: optimizer used during trainined
-            :param epoch:int: the current epoch (for logging)
-            :param noise_sd:float: the std-dev of the Guassian noise perturbation of the input
-            :param classifier:torch.nn.Module=None: a ``freezed'' classifier attached to the denoiser
-                                                    (required classifciation/stability objectives), None for denoising objective
-        """
-
-        print("Training model for classification task.")
-        batch_time = AverageMeter()
-        data_time = AverageMeter()
-        losses = AverageMeter()
-        end = time.time()
-
-        # switch to train mode
-        self.denoiser.train()
-        self.classifier.eval()
-
-        class loss_fn:
-            def __init__(self, criterion, classifier):
-                self.classifier = classifier
-                self.criterion = criterion
-            
-            def set_target(self, targets):
-                self.targets = targets
-            
-            def __call__(self, inputs_q):
-                inputs_q_pre = self.classifier(inputs_q)
-                loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
-                return loss_tmp_plus
-
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model))
-        
-        for i, (inputs, targets) in enumerate(self.train_loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
-
-            inputs = inputs.cuda()
-            targets = targets.cuda()
-            if self.args.ground_truth == 'original_output':
-                with torch.no_grad():
-                    targets = self.model(inputs)
-                    targets = targets.argmax(1).detach().clone()
-
-            noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
-            recon = self.denoiser(inputs + noise)
-
-            if self.args.optimization_method == 'FO':
-                recon = self.model(recon)
-                loss = self.criterion(recon, targets)
-
-                # record loss
-                losses.update(loss.item(), inputs.size(0))
-
-            elif self.args.optimization_method == 'ZO':
-                recon.requires_grad_(True)
-                recon.retain_grad()
-
-                loss = self.es_adapter.run(recon, self.model)
-
-            # compute gradient and do SGD step
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            # TODO: create the log file
-            if i % self.args.print_freq == 0:
-                print('Epoch: [{0}][{1}/{2}]\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                    'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
-                    epoch, i, len(self.train_loader), batch_time=batch_time,
-                    data_time=data_time, loss=losses))
-        return losses.avg
+        pass
     
-    def test_with_classifier(self, loader):
-        """
-        A function to test the classification performance of a denoiser when attached to a given classifier
-            :param loader:DataLoader: test dataloader
-            :param denoiser:torch.nn.Module: the denoiser
-            :param criterion: the loss function (e.g. CE)
-            :param noise_sd:float: the std-dev of the Guassian noise perturbation of the input
-            :param print_freq:int: the frequency of logging
-            :param classifier:torch.nn.Module: the classifier to which the denoiser is attached
-        """
-
-        batch_time = AverageMeter()
-        data_time = AverageMeter()
-        losses = AverageMeter()
-        top1 = AverageMeter()
-        top5 = AverageMeter()
-        end = time.time()
-
-        # switch to eval mode
-        self.model.eval()
-        if self.denoiser:
-            self.denoiser.eval()
-
-        with torch.no_grad():
-            for i, (inputs, targets) in enumerate(loader):
-                # measure data loading time
-                data_time.update(time.time() - end)
-
-                inputs = inputs.cuda()
-                targets = targets.cuda()
-
-                # augment inputs with noise
-                inputs = inputs + torch.randn_like(inputs, device='cuda') * self.args.noise_sd
-
-                if self.denoiser is not None:
-                    inputs = self.denoiser(inputs)
-                # compute output
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
-                loss_mean = loss.mean()
-
-                # measure accuracy and record loss
-                acc1, acc5 = accuracy(outputs, targets, topk=(1, 5))
-                losses.update(loss_mean.item(), inputs.size(0))
-                top1.update(acc1.item(), inputs.size(0))
-                top5.update(acc5.item(), inputs.size(0))
-
-                # measure elapsed time
-                batch_time.update(time.time() - end)
-                end = time.time()
-
-                if i % self.args.print_freq == 0:
-                    log = 'Test: [{0}/{1}]\t'' \
-                    ''Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'' \
-                    ''Data {data_time.val:.3f} ({data_time.avg:.3f})\t'' \
-                    ''Loss {loss.val:.4f} ({loss.avg:.4f})\t'' \
-                    ''Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'' \
-                    ''Acc@5 {top5.val:.3f} ({top5.avg:.3f})\n'.format(
-                        i, len(loader), batch_time=batch_time,
-                        data_time=data_time, loss=losses, top1=top1, top5=top5)
-
-                    print(log)
-            return (losses.avg, top1.avg)
+    def eval(self, loader):
+        pass
 
     def test(self):
         print("Testing model for classification task")

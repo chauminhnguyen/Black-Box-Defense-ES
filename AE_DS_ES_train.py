@@ -428,17 +428,15 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
         
     from tqdm import tqdm
     for i, (inputs, targets) in enumerate(loader):
-        print('======================================')
-        print(inputs.shape, targets.shape)
         # measure data loading time
         data_time.update(time.time() - end)
             
         inputs = inputs.cuda()
         targets = targets.cuda()
-        if args.ground_truth == 'original_output':
-            with torch.no_grad():
-                targets = classifier(inputs)
-                targets = targets.argmax(1).detach().clone()
+        # if args.ground_truth == 'original_output':
+        #     with torch.no_grad():
+        #         targets = classifier(inputs)
+        #         targets = targets.argmax(1).detach().clone()
 
         noise = torch.randn_like(inputs, device='cuda') * noise_sd
         recon = denoiser(inputs + noise)
@@ -461,9 +459,9 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
             w = recon.size()[3]
             d = channel * h * w
 
-            if batch_size == 1:
-                inputs = inputs.unsqueeze(0)
-                targets = targets.unsqueeze(0)
+            # if batch_size == 1:
+            #     inputs = inputs.unsqueeze(0)
+            #     targets = targets.unsqueeze(0)
 
             # For DS model, only RGE could be exploited for ZO gradient estimation
             if args.zo_method == 'RGE':
@@ -473,11 +471,12 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                     q = torch.tensor(args.q).cuda()
 
                     # Forward Inference (Original)
-                    original_pre = classifier(inputs).argmax(1).detach().clone()
+                    # original_pre = classifier(inputs).argmax(1).detach().clone()
+                    original_pre = classifier(inputs).cuda()
 
                     recon_pre = classifier(recon)
                     # =====================================================================
-                    recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2)
+                    recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2).cuda()
                     loss_0 = criterion(recon_pre.float(), original_pre.long())
 
                     # record original loss
@@ -499,9 +498,9 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                         recon_q = recon_q.view(batch_size, channel, h, w)
                         recon_q_pre = classifier(recon_q)
                         # =====================================================================
-                        recon_pre = F.one_hot(recon_q_pre, num_classes=35).permute(0,3,1,2)
                         # Loss Calculation and Gradient Estimation
-                        
+                        recon_q_pre = F.one_hot(recon_q_pre, num_classes=35).permute(0,3,1,2).cuda()
+
                         loss_tmp = criterion(recon_q_pre.float(), original_pre.long())
                         loss_diff = torch.tensor(loss_tmp - loss_0)
                         grad_est = grad_est + (d / q) * u * loss_diff.reshape(batch_size, 1).expand_as(u) / mu
@@ -514,6 +513,8 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
             
             else:
                 recon_pre = classifier(recon)  # (batch_size, 10)
+                recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2).cuda()
+                targets = targets.squeeze(1)
                 loss_0 = criterion(recon_pre.float(), targets.long())  # (batch_size )
                 loss_0_mean = loss_0.mean()
                 losses.update(loss_0_mean.item(), inputs.size(0))

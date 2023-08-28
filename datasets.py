@@ -333,10 +333,10 @@ class Cityscapes():
         data_prefix=dict(img_path='leftImg8bit/' + split, seg_map_path='gtFine/' + split)
         test_pipeline = [
             dict(type='LoadImageFromFile'),
+            dict(type='LoadAnnotations'),
             dict(type='Resize', scale=(512, 1024), keep_ratio=True),
             # add loading annotation after ``Resize`` because ground truth
             # does not need to do resize data transform
-            dict(type='LoadAnnotations'),
             dict(type='PackSegInputs')
         ]
 
