@@ -475,6 +475,9 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                     original_pre = classifier(inputs).cuda()
 
                     recon_pre = classifier(recon)
+                    if batch_size == 1:
+                        recon_pre = recon_pre.unsqueeze(0)
+                        original_pre = original_pre.unsqueeze(0)
                     # =====================================================================
                     recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2).cuda()
                     loss_0 = criterion(recon_pre.float(), original_pre.long())
@@ -497,6 +500,8 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                         recon_q = recon_flat_no_grad + mu * u
                         recon_q = recon_q.view(batch_size, channel, h, w)
                         recon_q_pre = classifier(recon_q)
+                        if batch_size == 1:
+                            recon_q_pre = recon_q_pre.unsqueeze(0)
                         # =====================================================================
                         # Loss Calculation and Gradient Estimation
                         recon_q_pre = F.one_hot(recon_q_pre, num_classes=35).permute(0,3,1,2).cuda()
