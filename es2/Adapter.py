@@ -29,10 +29,7 @@ class Adapter:
                 q = torch.tensor(self.q).cuda()
 
                 # Forward Inference (Original)
-                original_pre = self.model(ori_inputs).argmax(1).detach().clone()
-
-                recon_pre = self.model(inputs)     
-                loss_0 = self.loss_fn(recon_pre, original_pre)
+                loss_0 = self.loss_fn(inputs, ori_inputs)
 
                 # # record original loss
                 # loss_0_mean = loss_0.mean()
@@ -53,12 +50,10 @@ class Adapter:
 
                     recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
                     recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
-                    recon_q_pre_plus = self.model(recon_q_plus)
-                    recon_q_pre_minus = self.model(recon_q_minus)
 
                     # Loss Calculation and Gradient Estimation
-                    loss_tmp_plus = self.loss_fn(recon_q_pre_plus, original_pre)
-                    loss_tmp_minus = self.loss_fn(recon_q_pre_minus, original_pre)
+                    loss_tmp_plus = self.loss_fn(recon_q_plus, ori_inputs)
+                    loss_tmp_minus = self.loss_fn(recon_q_minus, ori_inputs)
 
                     loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
                     grad_est = grad_est + u * loss_diff.reshape(batch_size, 1).expand_as(u) / (2 * mu)
@@ -76,10 +71,7 @@ class Adapter:
                 q = torch.tensor(self.q).cuda()
 
                 # Forward Inference (Original)
-                original_pre = self.model(ori_inputs).argmax(1).detach().clone()
-
-                recon_pre = self.model(inputs)
-                loss_0 = self.loss_fn(recon_pre, original_pre)
+                loss_0 = self.loss_fn(inputs, ori_inputs)
 
                 recon_flat_no_grad = torch.flatten(inputs, start_dim=1).cuda()
                 grad_est = torch.zeros(batch_size, d).cuda()
@@ -94,10 +86,9 @@ class Adapter:
                     # Forward Inference (reconstructed image + random direction vector)
                     recon_q = recon_flat_no_grad + mu * u
                     recon_q = recon_q.view(batch_size, channel, h, w)
-                    recon_q_pre = self.model(recon_q)
 
                     # Loss Calculation and Gradient Estimation
-                    loss_tmp = self.loss_fn(recon_q_pre, original_pre)
+                    loss_tmp = self.loss_fn(recon_q, ori_inputs)
                     loss_diff = torch.tensor(loss_tmp - loss_0)
                     grad_est = grad_est + (d / q) * u * loss_diff.reshape(batch_size, 1).expand_as(u) / mu
 
@@ -108,7 +99,7 @@ class Adapter:
             loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
             return loss
         
-        recon_pre = self.model(inputs)  # (batch_size, 10)
+        # recon_pre = self.model(inputs)  # (batch_size, 10)
         # loss_0 = criterion(recon_pre, targets)  # (batch_size )
         # loss_0_mean = loss_0.mean()
         # losses.update(loss_0_mean.item(), inputs.size(0))
@@ -117,7 +108,7 @@ class Adapter:
 
         targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
         self.loss_fn.set_target(targets_)
-        grad_est_no_grad, recon_flat = self.med.run(recon_pre, self.loss_fn)
+        grad_est_no_grad, recon_flat = self.med.run(inputs, self.loss_fn)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
         loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean

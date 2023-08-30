@@ -2,6 +2,7 @@ from base import BaseTask
 from torch.utils.data import DataLoader
 from datasets import get_dataset
 import torch
+from torch.optim.lr_scheduler import StepLR
 from architectures import get_architecture
 from torch.nn import CrossEntropyLoss
 import time
@@ -61,26 +62,30 @@ class Classification(BaseTask):
         self.model.cuda().eval()
         requires_grad_(self.model, False)
     
-    def train(self, args):
+    def train(self):
         starting_epoch = 0
-        logfilename = os.path.join(args.outdir, 'log.txt')
+        logfilename = os.path.join(self.args.outdir, 'log.txt')
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
-        self.optimizer = build_opt(args.optimizer_method)
+        self.optimizer = build_opt(self.args.optimizer_method)
         self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
-        for epoch in range(starting_epoch, args.epochs):
+        scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
+        for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
             
             if self.args.model_type == 'AE_DS':
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
-                train_loss = self.train_denoiser(args, epoch)
+                train_loss = self.train_denoiser(self.args, epoch)
             _, train_acc = self.eval(self.train_loader)
             test_loss, test_acc = self.eval(self.test_loader)
             
             after = time.time()
 
             log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
-                epoch, after - before, args.lr, train_loss, test_loss, train_acc, test_acc))
+                epoch, after - before, self.args.lr, train_loss, test_loss, train_acc, test_acc))
+            
+            scheduler.step(epoch)
+            self.args.lr = scheduler.get_lr()[0]
 
     def train_denoiser_with_ae(self, epoch):
         """

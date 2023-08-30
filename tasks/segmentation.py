@@ -10,6 +10,7 @@ import os
 import torch.nn as nn
 from torchvision import transforms
 from mmseg.datasets import Cityscapes
+import torch.nn.functional as F
 
 
 class Segmentation(BaseTask):
@@ -101,6 +102,7 @@ class Segmentation(BaseTask):
             
             def __call__(self, inputs_q):
                 inputs_q_pre = self.classifier(inputs_q)
+                inputs_q_pre = F.one_hot(inputs_q_pre, num_classes=35).permute(0,3,1,2).cuda()
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
