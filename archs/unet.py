@@ -18,4 +18,6 @@ class UNet():
         # result = show_result_pyplot(self.model, images, segDataSample)
         result = self.inferencer(images, show=False)
         result = torch.tensor(result['predictions'])
+        if len(result.shape) == 2:
+            result = result.unsqueeze(0)
         return result

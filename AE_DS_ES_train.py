@@ -413,7 +413,8 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
         
         def __call__(self, inputs_q):
             inputs_q_pre = self.classifier(inputs_q)
-            loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
+            inputs_q_pre = inputs_q_pre.view(-1)
+            loss_tmp_plus = self.criterion(inputs_q_pre.float(), self.targets.long())
             return loss_tmp_plus
 
     if args.zo_method =='GES':
@@ -475,9 +476,6 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                     original_pre = classifier(inputs).cuda()
 
                     recon_pre = classifier(recon)
-                    if batch_size == 1:
-                        recon_pre = recon_pre.unsqueeze(0)
-                        original_pre = original_pre.unsqueeze(0)
                     # =====================================================================
                     recon_pre = F.one_hot(recon_pre, num_classes=35).permute(0,3,1,2).cuda()
                     loss_0 = criterion(recon_pre.float(), original_pre.long())
@@ -500,8 +498,6 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                         recon_q = recon_flat_no_grad + mu * u
                         recon_q = recon_q.view(batch_size, channel, h, w)
                         recon_q_pre = classifier(recon_q)
-                        if batch_size == 1:
-                            recon_q_pre = recon_q_pre.unsqueeze(0)
                         # =====================================================================
                         # Loss Calculation and Gradient Estimation
                         recon_q_pre = F.one_hot(recon_q_pre, num_classes=35).permute(0,3,1,2).cuda()
@@ -525,7 +521,8 @@ def train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimizer: O
                 losses.update(loss_0_mean.item(), inputs.size(0))
                 if recon.shape[0] != args.batch:
                     continue
-                targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)
+                # targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)
+                targets_ = targets.view(h, w, 1).repeat(1, 1, args.q).view(h*w * args.q)
                 loss_fn.set_target(targets_)
                 grad_est_no_grad, recon_flat = med.run(recon, loss_fn)
 
@@ -1033,10 +1030,7 @@ def recon_train(loader: DataLoader, denoiser: torch.nn.Module, criterion, optimi
                 original_recon = recon_net(img)
 
                 recon_test = recon_net(recon)
-                if batch_size == 1:
-                    recon_test = recon_test.unsqueeze(0)
-                    original_recon = original_recon.unsqueeze(0)
-
+                
                 recon_test = F.one_hot(recon_test, num_classes=35).permute(0,3,1,2)
 
                 loss_0 = criterion(recon_test.float(), original_recon.long())
