@@ -7,7 +7,7 @@ from architectures import get_architecture
 from torch.nn import CrossEntropyLoss
 import time
 from .train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
-from es2.Adapter import Adapter
+from es2.Adapter import Adapter, Adapter_RGE_CGE
 from tqdm import tqdm
 import os
 import torch.nn as nn
@@ -230,7 +230,10 @@ class Classification(BaseTask):
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
+        if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+            self.es_adapter = Adapter_RGE_CGE(self.args.zo_method, self.args.q, self.model, self.denoiser, self.criterion, losses)
+        else:
+            self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -257,7 +260,10 @@ class Classification(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
 
-                loss = self.es_adapter.run1(recon, self.model)
+                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+                    loss = self.es_adapter.run(inputs, recon)
+                else:
+                    loss = self.es_adapter.run(inputs, targets)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
