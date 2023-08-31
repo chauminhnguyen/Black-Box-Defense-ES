@@ -1,4 +1,4 @@
-from base import BaseTask
+from .base import BaseTask
 from torch.utils.data import DataLoader
 from datasets import get_dataset
 import torch
@@ -6,7 +6,7 @@ from torch.optim.lr_scheduler import StepLR
 from architectures import get_architecture
 from torch.nn import CrossEntropyLoss
 import time
-from train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
+from .train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
 from es2 import Adapter
 from tqdm import tqdm
 import os
@@ -17,16 +17,18 @@ class Classification(BaseTask):
     def __init__(self, args) -> None:
         super().__init__()
         self.args = args
+        self.load_data(args.dataset, args.batch, args.workers)
+        self.build_model(self.args)
 
-    def load_data(self, dataset_name, batch_size, num_workers, pin_memory):
+    def load_data(self, dataset_name, batch_size, num_workers):
         print("Load dataset for classification task")
         train_dataset = get_dataset(dataset_name, 'train')
         test_dataset = get_dataset(dataset_name, 'test')
 
         self.train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size,
-                                  num_workers=num_workers, pin_memory=pin_memory)
+                                  num_workers=num_workers)
         self.test_loader = DataLoader(test_dataset, shuffle=False, batch_size=batch_size,
-                                 num_workers=num_workers, pin_memory=pin_memory)
+                                 num_workers=num_workers)
 
     def build_model(self, args):
         print("Building model for classification task")
@@ -34,27 +36,27 @@ class Classification(BaseTask):
         if args.pretrained_denoiser:
             checkpoint = torch.load(args.pretrained_denoiser)
             assert checkpoint['arch'] == args.arch
-            denoiser = get_architecture(checkpoint['arch'], args.dataset)
-            denoiser.load_state_dict(checkpoint['state_dict'])
+            self.denoiser = get_architecture(checkpoint['arch'], args.dataset)
+            self.denoiser.load_state_dict(checkpoint['state_dict'])
         else:
-            denoiser = get_architecture(args.arch, args.dataset)
+            self.denoiser = get_architecture(args.arch, args.dataset)
 
         if args.model_type == 'AE_DS':
             if args.pretrained_encoder:
                 checkpoint = torch.load(args.pretrained_encoder)
                 assert checkpoint['arch'] == args.encoder_arch
-                encoder = get_architecture(checkpoint['arch'], args.dataset)
-                encoder.load_state_dict(checkpoint['state_dict'])
+                self.encoder = get_architecture(checkpoint['arch'], args.dataset)
+                self.encoder.load_state_dict(checkpoint['state_dict'])
             else:
-                encoder = get_architecture(args.encoder_arch, args.dataset)
+                self.encoder = get_architecture(args.encoder_arch, args.dataset)
 
             if args.pretrained_decoder:
                 checkpoint = torch.load(args.pretrained_decoder)
                 assert checkpoint['arch'] == args.decoder_arch
-                decoder = get_architecture(checkpoint['arch'], args.dataset)
-                decoder.load_state_dict(checkpoint['state_dict'])
+                self.decoder = get_architecture(checkpoint['arch'], args.dataset)
+                self.decoder.load_state_dict(checkpoint['state_dict'])
             else:
-                decoder = get_architecture(args.decoder_arch, args.dataset)
+                self.decoder = get_architecture(args.decoder_arch, args.dataset)
         
         checkpoint = torch.load(args.classifier)
         self.model = get_architecture(checkpoint['arch'], args.dataset)
@@ -66,7 +68,12 @@ class Classification(BaseTask):
         starting_epoch = 0
         logfilename = os.path.join(self.args.outdir, 'log.txt')
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
-        self.optimizer = build_opt(self.args.optimizer_method)
+
+        if self.args.model_type == 'AE_DS':
+            self.optimizer = build_opt(self.args.optimizer, list(self.encoder.parameters()) + list(self.decoder.parameters()) + list(self.denoiser.parameters()))
+        elif self.args.model_type == 'DS':
+            self.optimizer = build_opt(self.args.optimizer, self.denoiser.parameters())
+
         self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):

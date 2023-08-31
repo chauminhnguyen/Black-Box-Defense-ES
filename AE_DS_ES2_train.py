@@ -21,7 +21,7 @@ from torchvision.utils import save_image
 from recon_attacks import Attacker, recon_PGD_L2
 from es import GES, SGES
 from torchvision import transforms
-from tasks import Classification
+from tasks.classification import Classification
 
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -124,45 +124,45 @@ def main():
 
     # Copy code to output directory
     copy_code(args.outdir)
-    pin_memory = (args.dataset == "imagenet")
+    # pin_memory = (args.dataset == "imagenet")
 
-    # --------------------- Dataset Loading ----------------------
-    if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist':
-        train_dataset = get_dataset(args.dataset, 'train')
-        test_dataset = get_dataset(args.dataset, 'test')
+    # # --------------------- Dataset Loading ----------------------
+    # if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist':
+    #     train_dataset = get_dataset(args.dataset, 'train')
+    #     test_dataset = get_dataset(args.dataset, 'test')
 
-        train_loader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch,
-                                  num_workers=args.workers, pin_memory=pin_memory)
-        test_loader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch,
-                                 num_workers=args.workers, pin_memory=pin_memory)
+    #     train_loader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch,
+    #                               num_workers=args.workers, pin_memory=pin_memory)
+    #     test_loader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch,
+    #                              num_workers=args.workers, pin_memory=pin_memory)
     
-    elif args.dataset == 'cityscapes':
-        # dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
-        dataset_path = "/content/mmsegmentation/data/cityscapes"
-        train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
-                                        transforms.RandomVerticalFlip(p=0.5), \
-                                        transforms.ToTensor()])
+    # elif args.dataset == 'cityscapes':
+    #     # dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
+    #     dataset_path = "/content/mmsegmentation/data/cityscapes"
+    #     train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
+    #                                     transforms.RandomVerticalFlip(p=0.5), \
+    #                                     transforms.ToTensor()])
         
-        test_transform = transforms.Compose([transforms.ToTensor()])
+    #     test_transform = transforms.Compose([transforms.ToTensor()])
 
-        temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
-        train_loader = temp.build_data()
+    #     temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
+    #     train_loader = temp.build_data()
 
-        temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
-        test_loader = temp.build_data()
+    #     temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
+    #     test_loader = temp.build_data()
         
     
-    elif args.dataset == 'restricted_imagenet':
-        in_path = '/localscratch2/damondemon/datasets/imagenet'
-        in_info_path = '/localscratch2/damondemon/datasets/imagenet_info'
-        in_hier = ImageNetHierarchy(in_path, in_info_path)
+    # elif args.dataset == 'restricted_imagenet':
+    #     in_path = '/localscratch2/damondemon/datasets/imagenet'
+    #     in_info_path = '/localscratch2/damondemon/datasets/imagenet_info'
+    #     in_hier = ImageNetHierarchy(in_path, in_info_path)
 
-        superclass_wnid = ['n02084071', 'n02120997', 'n01639765', 'n01662784', 'n02401031', 'n02131653', 'n02484322',
-                           'n01976957', 'n02159955', 'n01482330']
+    #     superclass_wnid = ['n02084071', 'n02120997', 'n01639765', 'n01662784', 'n02401031', 'n02131653', 'n02484322',
+    #                        'n01976957', 'n02159955', 'n01482330']
 
-        class_ranges, label_map = in_hier.get_subclasses(superclass_wnid, balanced=True)
-        custom_dataset = dataset_r.CustomImageNet(in_path, class_ranges)
-        train_loader, test_loader = custom_dataset.make_loaders(workers=4, batch_size=args.batch)
+    #     class_ranges, label_map = in_hier.get_subclasses(superclass_wnid, balanced=True)
+    #     custom_dataset = dataset_r.CustomImageNet(in_path, class_ranges)
+    #     train_loader, test_loader = custom_dataset.make_loaders(workers=4, batch_size=args.batch)
 
     # --------------------- Model Loading -------------------------
     # a) Denoiser
@@ -192,17 +192,17 @@ def main():
         else:
             decoder = get_architecture(args.decoder_arch, args.dataset)
 
-    # c) Classifier / Reconstructor
-    if args.train_objective == 'segmentation':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        clf = get_segmentation_model(device)
+    # # c) Classifier / Reconstructor
+    # if args.train_objective == 'segmentation':
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     clf = get_segmentation_model(device)
         
-    else:
-        checkpoint = torch.load(args.classifier)
-        clf = get_architecture(checkpoint['arch'], args.dataset)
-        clf.load_state_dict(checkpoint['state_dict'])
-        clf.cuda().eval()
-        requires_grad_(clf, False)
+    # else:
+    #     checkpoint = torch.load(args.classifier)
+    #     clf = get_architecture(checkpoint['arch'], args.dataset)
+    #     clf.load_state_dict(checkpoint['state_dict'])
+    #     clf.cuda().eval()
+    #     requires_grad_(clf, False)
 
     # # --------------------- Model to be trained ------------------------
     
