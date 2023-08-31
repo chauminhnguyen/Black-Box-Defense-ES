@@ -8,9 +8,9 @@ import torch
 
 def build_opt(optimizer_method, models, lr=1e-3, weight_decay=1e-4):
     if optimizer_method.lower() =='adam':
-        optimizer = Adam(nn.ModuleList(models).parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = Adam(models.parameters(), lr=lr, weight_decay=weight_decay)
     elif optimizer_method.lower() =='sgd':
-        optimizer = SGD(nn.ModuleList(models).parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = SGD(models.parameters(), lr=lr, weight_decay=weight_decay)
     return optimizer
 
 

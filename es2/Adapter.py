@@ -1,6 +1,6 @@
 from es2 import *
 
-class Adapter:
+class Adapter():
     def __init__(self, zo_method, q, loss_fn, model) -> None:
         self.q = q
         self.mu = 0.005
@@ -16,7 +16,7 @@ class Adapter:
         self.loss_fn = loss_fn
         self.model = model
 
-    def run(self, ori_inputs, inputs, targets):
+    def run1(self, inputs, ori_inputs):
         batch_size = inputs.size()[0]
         channel = inputs.size()[1]
         h = inputs.size()[2]
@@ -98,6 +98,13 @@ class Adapter:
             # reconstructed image * gradient estimation   <--   g(x) * a
             loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
             return loss
+
+    def run2(self, inputs, targets):
+        batch_size = inputs.size()[0]
+        channel = inputs.size()[1]
+        h = inputs.size()[2]
+        w = inputs.size()[3]
+        d = channel * h * w
         
         # recon_pre = self.model(inputs)  # (batch_size, 10)
         # loss_0 = criterion(recon_pre, targets)  # (batch_size )

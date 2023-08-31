@@ -7,7 +7,7 @@ from architectures import get_architecture
 from torch.nn import CrossEntropyLoss
 import time
 from .train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
-from es2 import Adapter
+from es2.Adapter import Adapter
 from tqdm import tqdm
 import os
 import torch.nn as nn
@@ -70,9 +70,9 @@ class Classification(BaseTask):
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
 
         if self.args.model_type == 'AE_DS':
-            self.optimizer = build_opt(self.args.optimizer, list(self.encoder.parameters()) + list(self.decoder.parameters()) + list(self.denoiser.parameters()))
+            self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
         elif self.args.model_type == 'DS':
-            self.optimizer = build_opt(self.args.optimizer, self.denoiser.parameters())
+            self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
         self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
@@ -82,7 +82,7 @@ class Classification(BaseTask):
             if self.args.model_type == 'AE_DS':
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
-                train_loss = self.train_denoiser(self.args, epoch)
+                train_loss = self.train_denoiser(epoch)
             _, train_acc = self.eval(self.train_loader)
             test_loss, test_acc = self.eval(self.test_loader)
             
@@ -215,9 +215,9 @@ class Classification(BaseTask):
 
         # switch to train mode
         self.denoiser.train()
-        self.classifier.eval()
+        self.model.eval()
 
-        class loss_fn:
+        class loss_fn():
             def __init__(self, criterion, classifier):
                 self.classifier = classifier
                 self.criterion = criterion
@@ -257,7 +257,7 @@ class Classification(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
 
-                loss = self.es_adapter.run(recon, self.model)
+                loss = self.es_adapter.run1(recon, self.model)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
