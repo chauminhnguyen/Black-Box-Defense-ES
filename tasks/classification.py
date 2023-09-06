@@ -230,7 +230,7 @@ class Classification(BaseTask):
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(self.args.zo_method, self.args.q, self.model, self.denoiser, self.criterion, losses)
         else:
             self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
@@ -261,7 +261,7 @@ class Classification(BaseTask):
                 recon.retain_grad()
 
                 if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
-                    loss = self.es_adapter.run(inputs, recon)
+                    loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
 

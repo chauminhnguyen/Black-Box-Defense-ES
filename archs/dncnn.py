@@ -53,6 +53,8 @@ class DnCNN(nn.Module):
 
 
 if __name__ == '__main__':
-    from IPython import embed
-    embed()
+    # from IPython import embed
+    # embed()
     model = DnCNN()
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print(pytorch_total_params)
