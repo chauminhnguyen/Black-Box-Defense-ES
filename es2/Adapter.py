@@ -1,6 +1,5 @@
 from es2 import *
 
-
 class Adapter():
     def __init__(self, zo_method, q, loss_fn, model) -> None:
         self.q = q
@@ -92,8 +91,12 @@ class Adapter_RGE_CGE():
 
                     recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
                     recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
-                    recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
-                    recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
+                    if self.decoder is None:
+                        recon_q_pre_plus = self.model(recon_q_plus)
+                        recon_q_pre_minus = self.model(recon_q_minus)
+                    else:
+                        recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                        recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
 
                     # Loss Calculation and Gradient Estimation
                     loss_tmp_plus = self.criterion(recon_q_pre_plus, original_pre)
@@ -186,19 +189,23 @@ class Adapter_RGE_CGE():
                 recon_q_minus = recon_q - mu * u
 
                 # Black-Box Query
-                recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                
                 if self.decoder is None:
-                    recon_q_pre = self.model(recon_q)
+                    recon_q_pre_plus = self.model(recon_q_plus)
+                    recon_q_pre_minus = self.model(recon_q_minus)
+                    # recon_q_pre = self.model(recon_q)
                 else:
-                    recon_q_pre = self.model(self.decoder(recon_q))
+                    recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                    recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
+                    # recon_q_pre = self.model(self.decoder(recon_q))
                     
-                recon_q_pre_minus = classifier(decoder(recon_q_minus))
-                loss_tmp_plus = criterion(recon_q_pre_plus, targets)
-                loss_tmp_minus = criterion(recon_q_pre_minus, targets)
+                
+                loss_tmp_plus = self.criterion(recon_q_pre_plus, targets)
+                loss_tmp_minus = self.criterion(recon_q_pre_minus, targets)
 
                 loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
                 grad_est = u_flat * loss_diff.reshape(batch_size * args.q, 1).expand_as(u_flat) / (2 * mu)
-                grad_est = grad_est.view(batch_size, args.q, d).mean(1, keepdim=True).view(batch_size,d)
+                grad_est = grad_est.view(batch_size, self.q, d).mean(1, keepdim=True).view(batch_size,d)
 
             recon_flat = torch.flatten(recon, start_dim=1).cuda()
             grad_est_no_grad = grad_est.detach()

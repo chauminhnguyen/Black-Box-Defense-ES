@@ -194,7 +194,6 @@ class Classification(BaseTask):
         return losses.avg
     
     def train_denoiser(self, epoch):
-        print("Training model for classification task")
         """
         Function for training denoiser for one epoch
             :param loader:DataLoader: training dataloader
@@ -231,7 +230,7 @@ class Classification(BaseTask):
                 return loss_tmp_plus
 
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
-            self.es_adapter = Adapter_RGE_CGE(self.args.zo_method, self.args.q, self.model, self.denoiser, self.criterion, losses)
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
             self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
         
