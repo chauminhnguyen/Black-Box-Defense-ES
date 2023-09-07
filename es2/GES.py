@@ -57,6 +57,7 @@ class GES:
             self.U, _ = torch.linalg.qr(surg_grads_tensor.T)
 
         recon_flat = torch.flatten(inputs, start_dim=1).cuda()
-        grad_est_no_grad = grad_est.detach()
+        # grad_est_no_grad = grad_est.detach()
+        grad_est_no_grad = grad_est.clone().detach().requires_grad_(True)
 
         return grad_est_no_grad, recon_flat
