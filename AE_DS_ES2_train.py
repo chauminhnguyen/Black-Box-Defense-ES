@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToPILImage
 from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
 import torch.nn.functional as F
+from es2.PBT import PBT
 
 import argparse
 from datetime import datetime
@@ -49,7 +50,7 @@ parser.add_argument('--optimization_method', default='FO', type=str,
                     choices=['FO', 'ZO', 'ES'])
 parser.add_argument('--zo_method', default='RGE', type=str,
                     help="Random Gradient Estimation: RGE, Coordinate-Wise Gradient Estimation: CGE",
-                    choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES'])
+                    choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES','PBT'])
 parser.add_argument('--q', default=192, type=int, metavar='N',
                     help='query direction (default: 20)')
 parser.add_argument('--mu', default=0.005, type=float, metavar='N',
@@ -125,35 +126,11 @@ def main():
     # Copy code to output directory
     copy_code(args.outdir)
 
-    # # --------------------- Model Loading -------------------------
-    # # a) Denoiser
-    # if args.pretrained_denoiser:
-    #     checkpoint = torch.load(args.pretrained_denoiser)
-    #     assert checkpoint['arch'] == args.arch
-    #     denoiser = get_architecture(checkpoint['arch'], args.dataset)
-    #     denoiser.load_state_dict(checkpoint['state_dict'])
-    # else:
-    #     denoiser = get_architecture(args.arch, args.dataset)
-
-    # # b) AutoEncoder
-    # if args.model_type == 'AE_DS':
-    #     if args.pretrained_encoder:
-    #         checkpoint = torch.load(args.pretrained_encoder)
-    #         assert checkpoint['arch'] == args.encoder_arch
-    #         encoder = get_architecture(checkpoint['arch'], args.dataset)
-    #         encoder.load_state_dict(checkpoint['state_dict'])
-    #     else:
-    #         encoder = get_architecture(args.encoder_arch, args.dataset)
-
-    #     if args.pretrained_decoder:
-    #         checkpoint = torch.load(args.pretrained_decoder)
-    #         assert checkpoint['arch'] == args.decoder_arch
-    #         decoder = get_architecture(checkpoint['arch'], args.dataset)
-    #         decoder.load_state_dict(checkpoint['state_dict'])
-    #     else:
-    #         decoder = get_architecture(args.decoder_arch, args.dataset)
-
     # --------------------- Start Training -------------------------------
+    if args.zo_method == 'PBT':
+        pbt = PBT(args)
+        pbt.run()
+        pbt.visualize()
     if args.train_objective == 'classification':
         task = Classification(args)
         task.train()
@@ -162,30 +139,6 @@ def main():
         pass
     elif args.train_objective == 'segmentation':
         pass
-
-    
-        # # -----------------  Save the latest model  -------------------
-        # torch.save({
-        #     'epoch': epoch + 1,
-        #     'arch': args.arch,
-        #     'state_dict': denoiser.state_dict(),
-        #     'optimizer': optimizer.state_dict(),
-        # }, os.path.join(args.outdir, 'denoiser.pth.tar'))
-
-        # if args.model_type == 'AE_DS':
-        #     torch.save({
-        #         'epoch': epoch + 1,
-        #         'arch': args.encoder_arch,
-        #         'state_dict': encoder.state_dict(),
-        #         'optimizer': optimizer.state_dict(),
-        #     }, os.path.join(args.outdir, 'encoder.pth.tar'))
-
-        #     torch.save({
-        #         'epoch': epoch + 1,
-        #         'arch': args.decoder_arch,
-        #         'state_dict': decoder.state_dict(),
-        #         'optimizer': optimizer.state_dict(),
-        #     }, os.path.join(args.outdir, 'decoder.pth.tar'))
 
 
 def to_img(x):
