@@ -124,103 +124,34 @@ def main():
 
     # Copy code to output directory
     copy_code(args.outdir)
-    # pin_memory = (args.dataset == "imagenet")
 
-    # # --------------------- Dataset Loading ----------------------
-    # if args.dataset == 'cifar10' or args.dataset == 'stl10' or args.dataset == 'mnist':
-    #     train_dataset = get_dataset(args.dataset, 'train')
-    #     test_dataset = get_dataset(args.dataset, 'test')
-
-    #     train_loader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch,
-    #                               num_workers=args.workers, pin_memory=pin_memory)
-    #     test_loader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch,
-    #                              num_workers=args.workers, pin_memory=pin_memory)
-    
-    # elif args.dataset == 'cityscapes':
-    #     # dataset_path = os.path.join(os.getenv('PT_DATA_DIR', 'datasets'), 'cityscapes')
-    #     dataset_path = "/content/mmsegmentation/data/cityscapes"
-    #     train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
-    #                                     transforms.RandomVerticalFlip(p=0.5), \
-    #                                     transforms.ToTensor()])
-        
-    #     test_transform = transforms.Compose([transforms.ToTensor()])
-
-    #     temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=train_transform)
-    #     train_loader = temp.build_data()
-
-    #     temp = Cityscapes(dataset_path, split='train', batch_size=args.batch, transform=test_transform)
-    #     test_loader = temp.build_data()
-        
-    
-    # elif args.dataset == 'restricted_imagenet':
-    #     in_path = '/localscratch2/damondemon/datasets/imagenet'
-    #     in_info_path = '/localscratch2/damondemon/datasets/imagenet_info'
-    #     in_hier = ImageNetHierarchy(in_path, in_info_path)
-
-    #     superclass_wnid = ['n02084071', 'n02120997', 'n01639765', 'n01662784', 'n02401031', 'n02131653', 'n02484322',
-    #                        'n01976957', 'n02159955', 'n01482330']
-
-    #     class_ranges, label_map = in_hier.get_subclasses(superclass_wnid, balanced=True)
-    #     custom_dataset = dataset_r.CustomImageNet(in_path, class_ranges)
-    #     train_loader, test_loader = custom_dataset.make_loaders(workers=4, batch_size=args.batch)
-
-    # --------------------- Model Loading -------------------------
-    # a) Denoiser
-    if args.pretrained_denoiser:
-        checkpoint = torch.load(args.pretrained_denoiser)
-        assert checkpoint['arch'] == args.arch
-        denoiser = get_architecture(checkpoint['arch'], args.dataset)
-        denoiser.load_state_dict(checkpoint['state_dict'])
-    else:
-        denoiser = get_architecture(args.arch, args.dataset)
-
-    # b) AutoEncoder
-    if args.model_type == 'AE_DS':
-        if args.pretrained_encoder:
-            checkpoint = torch.load(args.pretrained_encoder)
-            assert checkpoint['arch'] == args.encoder_arch
-            encoder = get_architecture(checkpoint['arch'], args.dataset)
-            encoder.load_state_dict(checkpoint['state_dict'])
-        else:
-            encoder = get_architecture(args.encoder_arch, args.dataset)
-
-        if args.pretrained_decoder:
-            checkpoint = torch.load(args.pretrained_decoder)
-            assert checkpoint['arch'] == args.decoder_arch
-            decoder = get_architecture(checkpoint['arch'], args.dataset)
-            decoder.load_state_dict(checkpoint['state_dict'])
-        else:
-            decoder = get_architecture(args.decoder_arch, args.dataset)
-
-    # # c) Classifier / Reconstructor
-    # if args.train_objective == 'segmentation':
-    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #     clf = get_segmentation_model(device)
-        
+    # # --------------------- Model Loading -------------------------
+    # # a) Denoiser
+    # if args.pretrained_denoiser:
+    #     checkpoint = torch.load(args.pretrained_denoiser)
+    #     assert checkpoint['arch'] == args.arch
+    #     denoiser = get_architecture(checkpoint['arch'], args.dataset)
+    #     denoiser.load_state_dict(checkpoint['state_dict'])
     # else:
-    #     checkpoint = torch.load(args.classifier)
-    #     clf = get_architecture(checkpoint['arch'], args.dataset)
-    #     clf.load_state_dict(checkpoint['state_dict'])
-    #     clf.cuda().eval()
-    #     requires_grad_(clf, False)
+    #     denoiser = get_architecture(args.arch, args.dataset)
 
-    # # --------------------- Model to be trained ------------------------
-    
-    # if args.optimizer == 'Adam':
-    #     if args.train_method =='part':
-    #         optimizer = Adam(denoiser.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    #     if args.train_method =='whole':
-    #         optimizer = Adam(itertools.chain(denoiser.parameters(), encoder.parameters()), lr=args.lr, weight_decay=args.weight_decay)
-    #     if args.train_method =='whole_plus':
-    #         optimizer = Adam(itertools.chain(denoiser.parameters(), encoder.parameters(), decoder.parameters()), lr=args.lr, weight_decay=args.weight_decay)
-    # elif args.optimizer == 'SGD':
-    #     if args.train_method =='part':
-    #         optimizer = SGD(denoiser.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    #     if args.train_method =='whole':
-    #         optimizer = SGD(itertools.chain(denoiser.parameters(), encoder.parameters()), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    #     if args.train_method =='whole_plus':
-    #         optimizer = SGD(itertools.chain(denoiser.parameters(), encoder.parameters(), decoder.parameters()), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    # scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.gamma)
+    # # b) AutoEncoder
+    # if args.model_type == 'AE_DS':
+    #     if args.pretrained_encoder:
+    #         checkpoint = torch.load(args.pretrained_encoder)
+    #         assert checkpoint['arch'] == args.encoder_arch
+    #         encoder = get_architecture(checkpoint['arch'], args.dataset)
+    #         encoder.load_state_dict(checkpoint['state_dict'])
+    #     else:
+    #         encoder = get_architecture(args.encoder_arch, args.dataset)
+
+    #     if args.pretrained_decoder:
+    #         checkpoint = torch.load(args.pretrained_decoder)
+    #         assert checkpoint['arch'] == args.decoder_arch
+    #         decoder = get_architecture(checkpoint['arch'], args.dataset)
+    #         decoder.load_state_dict(checkpoint['state_dict'])
+    #     else:
+    #         decoder = get_architecture(args.decoder_arch, args.dataset)
 
     # --------------------- Start Training -------------------------------
     if args.train_objective == 'classification':
