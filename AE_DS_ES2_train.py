@@ -131,7 +131,7 @@ def main():
         pbt = PBT(args)
         pbt.run()
         pbt.visualize()
-    if args.train_objective == 'classification':
+    elif args.train_objective == 'classification':
         task = Classification(args)
         task.train()
 
