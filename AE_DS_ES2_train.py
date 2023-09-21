@@ -47,10 +47,11 @@ parser.add_argument('--measurement', default=576, type=int, metavar='N', help='t
 # Optimization Method
 parser.add_argument('--optimization_method', default='FO', type=str,
                     help="FO: First-Order (White-Box), ZO: Zeroth-Order (Black-box)",
-                    choices=['FO', 'ZO', 'ES'])
+                    choices=['FO', 'ZO'])
 parser.add_argument('--zo_method', default='RGE', type=str,
                     help="Random Gradient Estimation: RGE, Coordinate-Wise Gradient Estimation: CGE",
-                    choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES','PBT'])
+                    choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES'])
+
 parser.add_argument('--q', default=192, type=int, metavar='N',
                     help='query direction (default: 20)')
 parser.add_argument('--mu', default=0.005, type=float, metavar='N',
@@ -74,7 +75,7 @@ parser.add_argument('--pretrained-decoder', default='', type=str, help='path to 
 parser.add_argument('--train_method', default='whole', type=str,
                     help="*part*: only denoiser parameters would be optimized; *whole*: denoiser and encoder parameters would be optimized, *whole_plus*: denoiser and auto-encoder parameters would be optimized",
                     choices=['part', 'whole', 'whole_plus'])
-
+parser.add_argument('--PBT', type=bool, default=False)
 # Training Setting
 parser.add_argument('--outdir', type=str, help='folder to save denoiser and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
@@ -127,7 +128,7 @@ def main():
     copy_code(args.outdir)
 
     # --------------------- Start Training -------------------------------
-    if args.zo_method == 'PBT':
+    if args.PBT:
         pbt = PBT(args)
         pbt.run()
         pbt.visualize()
