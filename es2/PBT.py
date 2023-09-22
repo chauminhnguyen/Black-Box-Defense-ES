@@ -43,7 +43,7 @@ class PBT:
             tune_config=tune.TuneConfig(
                 metric="is_score",
                 mode="max",
-                num_samples=2 if smoke_test else 2,
+                num_samples=2 if smoke_test else 8,
                 scheduler=scheduler,
             ),
             param_space={
