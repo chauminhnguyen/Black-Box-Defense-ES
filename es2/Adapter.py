@@ -112,6 +112,46 @@ class Adapter_RGE_CGE():
             loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
             return loss
         
+        elif self.zo_method == 'CGE_sim':
+            # Generate Coordinate-wise Query Matrix
+            u_flat = torch.zeros(1, self.q, d).cuda()
+            for k in range(d):
+                u_flat[:, k, k] = 1
+            u_flat = u_flat.repeat(1, batch_size, 1).view(batch_size * self.q, d)
+            u = u_flat.view(-1, channel, h, w)
+
+            with torch.no_grad():
+                mu = torch.tensor(self.mu).cuda()
+
+                recon_pre = self.model(self.decoder(inputs))  # (batch_size, 10)
+
+                loss_0 = self.criterion(recon_pre, targets)  # (batch_size )
+                loss_0_mean = loss_0.mean()
+                self.losses.update(loss_0_mean.item(), inputs.size(0))
+
+                # Repeat q times
+                targets = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)  # (batch_size * q, )
+
+                recon_q = inputs.repeat((1, self.q, 1, 1)).view(-1, channel, h, w)
+                recon_q_plus = recon_q + mu * u
+                recon_q_minus = recon_q - mu * u
+
+                # Black-Box Query
+                recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
+                loss_tmp_plus = self.criterion(recon_q_pre_plus, targets)
+                loss_tmp_minus = self.criterion(recon_q_pre_minus, targets)
+
+                loss_diff = torch.tensor(loss_tmp_plus - loss_tmp_minus)
+                grad_est = u_flat * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / (2 * mu)
+                grad_est = grad_est.view(batch_size, self.q, d).mean(1, keepdim=True).view(batch_size,d)
+
+            recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+            grad_est_no_grad = grad_est.detach()
+
+            # reconstructed image * gradient estimation   <--   g(x) * a
+            loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+        
         elif self.zo_method == 'RGE':
             with torch.no_grad():
                 m, sigma = 0, 100  # mean and standard deviation
