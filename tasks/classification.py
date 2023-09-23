@@ -142,10 +142,10 @@ class Classification(BaseTask):
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        model = nn.Sequential(self.decoder, self.model)
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
+            model = nn.Sequential(self.decoder, self.model)
             self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
@@ -257,9 +257,6 @@ class Classification(BaseTask):
                 recon = self.model(recon)
                 loss = self.criterion(recon, targets)
 
-                # record loss
-                losses.update(loss.item(), inputs.size(0))
-
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
                 recon.retain_grad()
@@ -268,6 +265,8 @@ class Classification(BaseTask):
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
+            # record loss
+            losses.update(loss.item(), inputs.size(0))
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
@@ -322,8 +321,11 @@ class Classification(BaseTask):
                 # augment inputs with noise
                 inputs = inputs + torch.randn_like(inputs, device='cuda') * self.args.noise_sd
 
-                if self.denoiser is not None:
-                    inputs = self.denoiser(inputs)
+                inputs = self.denoiser(inputs)
+                if self.args.model_type == 'AE_DS':
+                    inputs = self.encoder(inputs)
+                    inputs = self.decoder(inputs)
+                    
                 # compute output
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
