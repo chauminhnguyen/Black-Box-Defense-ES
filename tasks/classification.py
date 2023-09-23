@@ -168,9 +168,6 @@ class Classification(BaseTask):
                 recon = self.model(recon)
                 loss = self.criterion(recon, targets)
 
-                # record loss
-                losses.update(loss.item(), inputs.size(0))
-
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
                 recon.retain_grad()
@@ -178,7 +175,10 @@ class Classification(BaseTask):
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
-
+            
+            # record loss
+            losses.update(loss.item(), inputs.size(0))
+            
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
             loss.backward()
