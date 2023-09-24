@@ -75,7 +75,8 @@ parser.add_argument('--pretrained-decoder', default='', type=str, help='path to 
 parser.add_argument('--train_method', default='whole', type=str,
                     help="*part*: only denoiser parameters would be optimized; *whole*: denoiser and encoder parameters would be optimized, *whole_plus*: denoiser and auto-encoder parameters would be optimized",
                     choices=['part', 'whole', 'whole_plus'])
-parser.add_argument('--PBT', type=bool, default=False)
+parser.add_argument('--PBT', action="store_true")
+
 # Training Setting
 parser.add_argument('--outdir', type=str, help='folder to save denoiser and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
