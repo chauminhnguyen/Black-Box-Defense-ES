@@ -325,7 +325,7 @@ class Classification(BaseTask):
                     inputs = self.denoiser(inputs)
                     
                 # compute output
-                outputs = self.model(outputs)
+                outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
                 loss_mean = loss.mean()
 
