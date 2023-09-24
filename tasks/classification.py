@@ -234,7 +234,7 @@ class Classification(BaseTask):
                 return loss_tmp_plus
 
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
-            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses)
         else:
             self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
         
@@ -306,6 +306,7 @@ class Classification(BaseTask):
 
         # switch to eval mode
         self.model.eval()
+        
         if self.denoiser:
             self.denoiser.eval()
 
@@ -320,13 +321,11 @@ class Classification(BaseTask):
                 # augment inputs with noise
                 inputs = inputs + torch.randn_like(inputs, device='cuda') * self.args.noise_sd
 
-                inputs = self.denoiser(inputs)
-                if self.args.model_type == 'AE_DS':
-                    inputs = self.encoder(inputs)
-                    inputs = self.decoder(inputs)
+                if self.denoiser is not None:
+                    inputs = self.denoiser(inputs)
                     
                 # compute output
-                outputs = self.model(inputs)
+                outputs = self.model(outputs)
                 loss = self.criterion(outputs, targets)
                 loss_mean = loss.mean()
 
