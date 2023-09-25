@@ -17,6 +17,7 @@ ray.init(log_to_driver=False, local_mode=False, logging_level=_ray_log_level)
 class PBT:
     def __init__(self, args) -> None:
         # Load the pretrained mnist classification model for inception_score
+        args.epochs = 1
         self.task = Classification(args)
         
         # Put the model in Ray object store.
