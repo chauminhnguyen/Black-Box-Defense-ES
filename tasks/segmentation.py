@@ -4,7 +4,7 @@ from architectures import get_segmentation_model
 from torch.nn import CrossEntropyLoss
 import time
 from train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
-from es2 import Adapter
+from es2 import Adapter, Adapter_RGE_CGE
 from tqdm import tqdm
 import os
 import torch.nn as nn
@@ -107,7 +107,12 @@ class Segmentation(BaseTask):
                 return loss_tmp_plus
 
         model = nn.Sequential(self.decoder, self.model)
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), model)
+        
+        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
+        else:
+            model = nn.Sequential(self.decoder, self.model)
+            self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -137,6 +142,7 @@ class Segmentation(BaseTask):
                 recon.retain_grad()
 
                 loss = self.es_adapter.run(inputs, recon, self.model)
+            
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()

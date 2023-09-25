@@ -309,6 +309,9 @@ class Classification(BaseTask):
         
         if self.denoiser:
             self.denoiser.eval()
+        if self.args.model_type == 'AE_DS':
+            self.encoder.eval()
+            self.decoder.eval()
 
         with torch.no_grad():
             for i, (inputs, targets) in enumerate(loader):
@@ -323,6 +326,9 @@ class Classification(BaseTask):
 
                 if self.denoiser is not None:
                     inputs = self.denoiser(inputs)
+                if self.args.model_type == 'AE_DS':
+                    inputs = self.encoder(inputs)
+                    inputs = self.decoder(inputs)
                     
                 # compute output
                 outputs = self.model(inputs)
