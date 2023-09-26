@@ -3,9 +3,14 @@ import torch
 import ray
 from ray import air, tune
 from ray.tune.schedulers import PopulationBasedTraining
+from ray.train import ScalingConfig
+from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
 
-from ray.tune.examples.pbt_dcgan_mnist.common import Net
+
+# from ray.tune.examples.pbt_dcgan_mnist.common import Net
 from tasks.classification import Classification
+import torch.nn as nn
 
 import logging
 
@@ -14,28 +19,47 @@ _ray_log_level = logging.ERROR
 ray.init(log_to_driver=False, local_mode=False, logging_level=_ray_log_level)
 
 
+def train_classification(args):
+    # args.epochs = 1
+    task = Classification(args)
+    
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            task.model = nn.DataParallel(task.model)
+    task.model.to(device)
+
+    task.train()
+
+
 class PBT:
     def __init__(self, args) -> None:
-        # Load the pretrained mnist classification model for inception_score
-        args.epochs = 1
-        self.task = Classification(args)
-        
-        # Put the model in Ray object store.
-        model_ref = ray.put(self.task.model)
-
         perturbation_interval = 5
         scheduler = PopulationBasedTraining(
             perturbation_interval=perturbation_interval,
             hyperparam_mutations={
                 # Distribution for resampling
-                "netG_lr": tune.uniform(1e-2, 1e-5),
-                "netD_lr": tune.uniform(1e-2, 1e-5),
+                "batch": tune.uniform(32, 512),
+                "lr": tune.uniform(1e-2, 1e-5),
+                "q": tune.uniform(50, 300),
             },
+        )
+
+        scaling_config = ScalingConfig(
+            # Number of distributed workers.
+            num_workers=2,
+            # Turn on/off GPU.
+            use_gpu=True,
+            # Specify resources used for trainer.
+            trainer_resources={"CPU": 1},
+            # Try to schedule workers on different nodes.
+            placement_strategy="SPREAD",
         )
 
         smoke_test = False  # For testing purposes: set this to False to run the full experiment
         self.tuner = tune.Tuner(
-            self.task.train(),
+            train_classification,
             run_config=air.RunConfig(
                 name="pbt_dcgan_mnist_tutorial",
                 stop={"training_iteration": 50 if smoke_test else 6000},
@@ -50,9 +74,9 @@ class PBT:
             param_space={
                 # Define how initial values of the learning rates should be chosen.
                 "lr": tune.choice([0.0001, 0.0002, 0.0005]),
-                "model_ref": model_ref,
                 "checkpoint_interval": perturbation_interval,
             },
+            scaling_config=scaling_config,
         )
 
     def run(self):

@@ -3,6 +3,7 @@ import torch
 from architectures import get_segmentation_model
 from torch.nn import CrossEntropyLoss
 import time
+from torch.optim.lr_scheduler import StepLR
 from train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
 from es2 import Adapter, Adapter_RGE_CGE
 from tqdm import tqdm
@@ -34,7 +35,7 @@ class Segmentation(BaseTask):
 
     def build_model(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.clf = get_segmentation_model(device)
+        self.model = get_segmentation_model(device)
 
     def train(self):
         starting_epoch = 0
@@ -42,6 +43,7 @@ class Segmentation(BaseTask):
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
         self.optimizer = build_opt(self.args.optimizer_method)
         self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
             
@@ -57,6 +59,9 @@ class Segmentation(BaseTask):
             log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
                 epoch, after - before, self.args.lr, train_loss, test_loss, train_acc, test_acc))
 
+            scheduler.step(epoch)
+            self.args.lr = scheduler.get_lr()[0]
+
     def train_denoiser_with_ae(self, epoch):
         """
         Function for training denoiser for one epoch
@@ -70,7 +75,7 @@ class Segmentation(BaseTask):
                                                     (required classifciation/stability objectives), None for denoising objective
         """
 
-        print("Training model for classification task with auto-encoder.")
+        print("Training model for segmentation task with auto-encoder.")
 
         batch_time = AverageMeter()
         data_time = AverageMeter()
@@ -93,20 +98,18 @@ class Segmentation(BaseTask):
         self.model.eval()
 
         class loss_fn:
-            def __init__(self, criterion, classifier):
-                self.classifier = classifier
+            def __init__(self, criterion, segmentation_model):
+                self.segmentation_model = segmentation_model
                 self.criterion = criterion
             
             def set_target(self, targets):
                 self.targets = targets
             
             def __call__(self, inputs_q):
-                inputs_q_pre = self.classifier(inputs_q)
+                inputs_q_pre = self.segmentation_model(inputs_q)
                 inputs_q_pre = F.one_hot(inputs_q_pre, num_classes=35).permute(0,3,1,2).cuda()
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
-
-        model = nn.Sequential(self.decoder, self.model)
         
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
@@ -140,8 +143,10 @@ class Segmentation(BaseTask):
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
                 recon.retain_grad()
-
-                loss = self.es_adapter.run(inputs, recon, self.model)
+                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+                    loss = self.es_adapter.run(inputs, recon, targets)
+                else:
+                    loss = self.es_adapter.run(inputs, targets)
             
 
             # compute gradient and do SGD step
@@ -164,20 +169,7 @@ class Segmentation(BaseTask):
         return losses.avg
 
     def train_denoiser(self, epoch):
-        print("Training model for classification task")
-        """
-        Function for training denoiser for one epoch
-            :param loader:DataLoader: training dataloader
-            :param denoiser:torch.nn.Module: the denoiser being trained
-            :param criterion: loss function
-            :param optimizer:Optimizer: optimizer used during trainined
-            :param epoch:int: the current epoch (for logging)
-            :param noise_sd:float: the std-dev of the Guassian noise perturbation of the input
-            :param classifier:torch.nn.Module=None: a ``freezed'' classifier attached to the denoiser
-                                                    (required classifciation/stability objectives), None for denoising objective
-        """
-
-        print("Training model for classification task.")
+        print("Training model for segmentation task.")
         batch_time = AverageMeter()
         data_time = AverageMeter()
         losses = AverageMeter()
@@ -185,22 +177,25 @@ class Segmentation(BaseTask):
 
         # switch to train mode
         self.denoiser.train()
-        self.classifier.eval()
+        self.model.eval()
 
         class loss_fn:
-            def __init__(self, criterion, classifier):
-                self.classifier = classifier
+            def __init__(self, criterion, segmentation_model):
+                self.segmentation_model = segmentation_model
                 self.criterion = criterion
             
             def set_target(self, targets):
                 self.targets = targets
             
             def __call__(self, inputs_q):
-                inputs_q_pre = self.classifier(inputs_q)
+                inputs_q_pre = self.segmentation_model(inputs_q)
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
 
-        self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
+        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses)
+        else:
+            self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -227,7 +222,10 @@ class Segmentation(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
 
-                loss = self.es_adapter.run(recon, self.model)
+                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+                    loss = self.es_adapter.run(inputs, recon, targets)
+                else:
+                    loss = self.es_adapter.run(inputs, targets)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
@@ -249,16 +247,7 @@ class Segmentation(BaseTask):
         return losses.avg
 
     def eval(self, loader):
-        """
-        A function to test the classification performance of a denoiser when attached to a given classifier
-            :param loader:DataLoader: test dataloader
-            :param denoiser:torch.nn.Module: the denoiser
-            :param criterion: the loss function (e.g. CE)
-            :param noise_sd:float: the std-dev of the Guassian noise perturbation of the input
-            :param print_freq:int: the frequency of logging
-            :param classifier:torch.nn.Module: the classifier to which the denoiser is attached
-        """
-        print("Evaluate model for classification task.")
+        print("Evaluate model for segmentation task.")
         batch_time = AverageMeter()
         data_time = AverageMeter()
         losses = AverageMeter()
@@ -268,8 +257,12 @@ class Segmentation(BaseTask):
 
         # switch to eval mode
         self.model.eval()
+        
         if self.denoiser:
             self.denoiser.eval()
+        if self.args.model_type == 'AE_DS':
+            self.encoder.eval()
+            self.decoder.eval()
 
         with torch.no_grad():
             for i, (inputs, targets) in enumerate(loader):

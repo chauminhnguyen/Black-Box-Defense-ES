@@ -360,3 +360,6 @@ class Classification(BaseTask):
 
     def test(self):
         print("Testing model for classification task")
+    
+    def get_model(self):
+        return self.model
