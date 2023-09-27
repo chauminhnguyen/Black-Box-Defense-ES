@@ -65,10 +65,10 @@ class Adapter_RGE_CGE():
                 # Forward Inference (Original)
                 original_pre = self.model(ori_inputs).argmax(1).detach().clone()
 
-                if self.decoder is None:
-                    recon_pre = self.model(inputs)
-                else:
-                    recon_pre = self.model(self.decoder(inputs))
+                # if self.decoder is None:
+                #     recon_pre = self.model(inputs)
+                # else:
+                recon_pre = self.model(self.decoder(inputs))
                     
                 loss_0 = self.criterion(recon_pre, original_pre)
 
@@ -91,12 +91,12 @@ class Adapter_RGE_CGE():
 
                     recon_q_plus = recon_q_plus.view(batch_size, channel, h, w)
                     recon_q_minus = recon_q_minus.view(batch_size, channel, h, w)
-                    if self.decoder is None:
-                        recon_q_pre_plus = self.model(recon_q_plus)
-                        recon_q_pre_minus = self.model(recon_q_minus)
-                    else:
-                        recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
-                        recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
+                    # if self.decoder is None:
+                    #     recon_q_pre_plus = self.model(recon_q_plus)
+                    #     recon_q_pre_minus = self.model(recon_q_minus)
+                    # else:
+                    recon_q_pre_plus = self.model(self.decoder(recon_q_plus))
+                    recon_q_pre_minus = self.model(self.decoder(recon_q_minus))
 
                     # Loss Calculation and Gradient Estimation
                     loss_tmp_plus = self.criterion(recon_q_pre_plus, original_pre)
