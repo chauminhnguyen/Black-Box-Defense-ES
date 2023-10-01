@@ -25,6 +25,25 @@ class Decoder_Segmentation(nn.Module):
         x = self.model(x)
         return x
 
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        inputs = F.sigmoid(inputs)
+        targets = F.sigmoid(targets)
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(inputs.shape[0], -1)
+        targets = targets.view(targets.shape[0], -1)
+        
+        intersection = (inputs * targets).sum(dim=1)                            
+        dice = (2.*intersection + smooth)/(inputs.sum(dim=1) + targets.sum(dim=1) + smooth)
+        
+        return 1 - dice
+
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
         super().__init__()
@@ -87,7 +106,8 @@ class Segmentation(BaseTask):
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
-        self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        self.criterion = CrossEntropyLoss(reduction='mean')
+        # self.criterion = DiceLoss()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
@@ -95,7 +115,7 @@ class Segmentation(BaseTask):
             if self.args.model_type == 'AE_DS':
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
-                train_loss = self.train_denoiser(self.args, epoch)
+                train_loss = self.train_denoiser(epoch)
             _, train_acc = self.eval(self.train_loader)
             test_loss, test_acc = self.eval(self.test_loader)
             
@@ -150,7 +170,7 @@ class Segmentation(BaseTask):
             
             def __call__(self, inputs_q):
                 inputs_q_pre = self.segmentation_model(inputs_q)
-                inputs_q_pre = F.one_hot(inputs_q_pre, num_classes=35).permute(0,3,1,2).cuda()
+                # inputs_q_pre = F.one_hot(inputs_q_pre, num_classes=35).permute(0,3,1,2).cuda()
                 loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
                 return loss_tmp_plus
         
@@ -220,7 +240,6 @@ class Segmentation(BaseTask):
 
         # switch to train mode
         self.denoiser.train()
-        self.model.eval()
 
         class loss_fn:
             def __init__(self, criterion, segmentation_model):
@@ -299,7 +318,6 @@ class Segmentation(BaseTask):
         end = time.time()
 
         # switch to eval mode
-        self.model.eval()
         
         if self.denoiser:
             self.denoiser.eval()
