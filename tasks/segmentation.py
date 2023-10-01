@@ -1,25 +1,39 @@
-from base import BaseTask
+from .base import BaseTask
 import torch
 from architectures import get_segmentation_model
 from torch.nn import CrossEntropyLoss
 import time
 from torch.optim.lr_scheduler import StepLR
-from train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
-from es2 import Adapter, Adapter_RGE_CGE
+from .train_utils import AverageMeter, accuracy, init_logfile, log, requires_grad_, build_opt
+from es2.Adapter import Adapter, Adapter_RGE_CGE
 from tqdm import tqdm
 import os
 import torch.nn as nn
 from torchvision import transforms
-from mmseg.datasets import Cityscapes
+from datasets import Cityscapes
 import torch.nn.functional as F
+from architectures import get_architecture
 
+class Decoder_Segmentation(nn.Module):
+    def __init__(self, decoder, model):
+        super(Decoder_Segmentation, self).__init__()
+        self.decoder = decoder
+        self.model = model
+    
+    def forward(self, x):
+        x = self.decoder(x)
+        x = self.model(x)
+        return x
 
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
         super().__init__()
         self.args = args
+        self.load_data()
+        self.build_model(self.args)
         
     def load_data(self):
+        print("Load dataset for segmentation task")
         dataset_path = "/content/mmsegmentation/data/cityscapes"
         train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
                                         transforms.RandomVerticalFlip(p=0.5), \
@@ -33,7 +47,34 @@ class Segmentation(BaseTask):
         temp = Cityscapes(dataset_path, split='train', batch_size=self.args.batch, transform=test_transform)
         self.test_loader = temp.build_data()
 
-    def build_model(self):
+    def build_model(self, args):
+        print("Building model for segmentation task")
+        
+        if args.pretrained_denoiser:
+            checkpoint = torch.load(args.pretrained_denoiser)
+            assert checkpoint['arch'] == args.arch
+            self.denoiser = get_architecture(checkpoint['arch'], args.dataset)
+            self.denoiser.load_state_dict(checkpoint['state_dict'])
+        else:
+            self.denoiser = get_architecture(args.arch, args.dataset)
+
+        if args.model_type == 'AE_DS':
+            if args.pretrained_encoder:
+                checkpoint = torch.load(args.pretrained_encoder)
+                assert checkpoint['arch'] == args.encoder_arch
+                self.encoder = get_architecture(checkpoint['arch'], args.dataset)
+                self.encoder.load_state_dict(checkpoint['state_dict'])
+            else:
+                self.encoder = get_architecture(args.encoder_arch, args.dataset)
+
+            if args.pretrained_decoder:
+                checkpoint = torch.load(args.pretrained_decoder)
+                assert checkpoint['arch'] == args.decoder_arch
+                self.decoder = get_architecture(checkpoint['arch'], args.dataset)
+                self.decoder.load_state_dict(checkpoint['state_dict'])
+            else:
+                self.decoder = get_architecture(args.decoder_arch, args.dataset)
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = get_segmentation_model(device)
 
@@ -41,7 +82,11 @@ class Segmentation(BaseTask):
         starting_epoch = 0
         logfilename = os.path.join(self.args.outdir, 'log.txt')
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
-        self.optimizer = build_opt(self.args.optimizer_method)
+        if self.args.model_type == 'AE_DS':
+            self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
+        elif self.args.model_type == 'DS':
+            self.optimizer = build_opt(self.args.optimizer, self.denoiser)
+
         self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
@@ -95,8 +140,6 @@ class Segmentation(BaseTask):
             self.encoder.train()
             self.decoder.train()
 
-        self.model.eval()
-
         class loss_fn:
             def __init__(self, criterion, segmentation_model):
                 self.segmentation_model = segmentation_model
@@ -114,7 +157,7 @@ class Segmentation(BaseTask):
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
-            model = nn.Sequential(self.decoder, self.model)
+            model = Decoder_Segmentation(decoder=self.decoder, model=self.model)
             self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, model), self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
