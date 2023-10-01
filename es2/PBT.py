@@ -2,6 +2,7 @@
 import torch
 import ray
 from ray import air, tune
+import ray.train as train
 from ray.tune.schedulers import PopulationBasedTraining
 from ray.train import ScalingConfig
 from ray.train.torch import TorchTrainer
@@ -40,7 +41,7 @@ class PBT:
             perturbation_interval=perturbation_interval,
             hyperparam_mutations={
                 # Distribution for resampling
-                "batch": tune.uniform(32, 512),
+                "batch": tune.choice([32, 64, 128, 256, 512]),
                 "lr": tune.uniform(1e-2, 1e-5),
                 "q": tune.uniform(50, 300),
             },

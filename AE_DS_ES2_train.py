@@ -23,6 +23,7 @@ from recon_attacks import Attacker, recon_PGD_L2
 from es import GES, SGES
 from torchvision import transforms
 from tasks.classification import Classification
+from tasks.segmentation import Segmentation
 
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -140,7 +141,8 @@ def main():
     elif args.train_objective == 'reconstruction':
         pass
     elif args.train_objective == 'segmentation':
-        pass
+        task = Segmentation(args)
+        task.train()
 
 
 def to_img(x):
