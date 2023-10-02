@@ -36,9 +36,9 @@ class CELoss(nn.Module):
         targets: (n, c, h, w)
         '''
         #flatten label and prediction tensors
-        inputs = inputs.view(inputs.shape[0], -1)
-        targets = targets.view(targets.shape[0], -1)
-        targets_argmax = targets.view(targets.shape[0], targets.shape[1], -1)
+        inputs = inputs.view(targets.shape[0], targets.shape[1], -1)
+        targets = targets.view(targets.shape[0], targets.shape[1], -1)
+        targets_argmax = targets.argmax(axis=1)
         loss = self.criterion(inputs, targets_argmax)
         return loss
 
