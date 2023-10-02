@@ -25,24 +25,22 @@ class Decoder_Segmentation(nn.Module):
         x = self.model(x)
         return x
 
-class DiceLoss(nn.Module):
-    def __init__(self, weight=None, size_average=True):
-        super(DiceLoss, self).__init__()
+class CELoss(nn.Module):
+    def __init__(self):
+        super(CELoss, self).__init__()
+        self.criterion = CrossEntropyLoss(reduction='mean')
 
-    def forward(self, inputs, targets, smooth=1):
-        
-        #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = F.sigmoid(inputs)
-        targets = F.sigmoid(targets)
-        
+    def forward(self, inputs, targets):
+        '''
+        inputs: (n, c, h, w)
+        targets: (n, c, h, w)
+        '''
         #flatten label and prediction tensors
         inputs = inputs.view(inputs.shape[0], -1)
         targets = targets.view(targets.shape[0], -1)
-        
-        intersection = (inputs * targets).sum(dim=1)                            
-        dice = (2.*intersection + smooth)/(inputs.sum(dim=1) + targets.sum(dim=1) + smooth)
-        
-        return 1 - dice
+        targets_argmax = targets.view(targets.shape[0], targets.shape[1], -1)
+        loss = self.criterion(inputs, targets_argmax)
+        return loss
 
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
@@ -106,8 +104,8 @@ class Segmentation(BaseTask):
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
-        self.criterion = CrossEntropyLoss(reduction='mean')
-        # self.criterion = DiceLoss()
+        # self.criterion = CrossEntropyLoss(reduction='mean')
+        self.criterion = CELoss()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
