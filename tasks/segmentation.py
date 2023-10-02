@@ -28,7 +28,7 @@ class Decoder_Segmentation(nn.Module):
 class CELoss(nn.Module):
     def __init__(self):
         super(CELoss, self).__init__()
-        self.criterion = CrossEntropyLoss(reduction='mean')
+        self.criterion = CrossEntropyLoss(reduce=False)
 
     def forward(self, inputs, targets):
         '''
@@ -36,11 +36,11 @@ class CELoss(nn.Module):
         targets: (n, c, h, w)
         '''
         #flatten label and prediction tensors
-        inputs = inputs.view(targets.shape[0], targets.shape[1], -1)
+        inputs = inputs.view(inputs.shape[0], inputs.shape[1], -1)
         targets = targets.view(targets.shape[0], targets.shape[1], -1)
         targets_argmax = targets.argmax(axis=1)
         loss = self.criterion(inputs, targets_argmax)
-        return loss
+        return loss.mean(axis=1)
 
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
