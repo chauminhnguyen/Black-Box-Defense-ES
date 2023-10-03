@@ -26,9 +26,10 @@ class Decoder_Segmentation(nn.Module):
         return x
 
 class CELoss(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(CELoss, self).__init__()
         self.criterion = CrossEntropyLoss(reduce=False)
+        self.device = device
 
     def forward(self, inputs, targets):
         '''
@@ -105,7 +106,8 @@ class Segmentation(BaseTask):
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
         # self.criterion = CrossEntropyLoss(reduction='mean')
-        self.criterion = CELoss()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.criterion = CELoss(device)
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
