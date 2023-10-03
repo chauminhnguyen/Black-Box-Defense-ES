@@ -62,7 +62,7 @@ class Segmentation(BaseTask):
         temp = Cityscapes(dataset_path, split='train', batch_size=self.args.batch, transform=train_transform)
         self.train_loader = temp.build_data()
 
-        temp = Cityscapes(dataset_path, split='train', batch_size=self.args.batch, transform=test_transform)
+        temp = Cityscapes(dataset_path, split='test', batch_size=self.args.batch, transform=test_transform)
         self.test_loader = temp.build_data()
 
     def build_model(self, args):
