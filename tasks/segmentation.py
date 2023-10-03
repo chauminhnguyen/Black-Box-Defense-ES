@@ -41,7 +41,7 @@ class CELoss(nn.Module):
         targets = targets.view(targets.shape[0], targets.shape[1], -1)
         targets_argmax = targets.argmax(axis=1)
         loss = self.criterion(inputs, targets_argmax)
-        return loss.mean(axis=1)
+        return loss.mean(axis=1).to(self.device)
 
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
