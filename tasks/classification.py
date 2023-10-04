@@ -14,15 +14,14 @@ import torch.nn as nn
 
 
 class CELoss(nn.Module):
-    def __init__(self, size_average=None, reduce=None, reduction='mean'):
+    def __init__(self):
         super(CELoss, self).__init__()
-        self.size_average = size_average
-        self.reduce = reduce
-        self.reduction = reduction
-        self.loss = nn.CrossEntropyLoss(size_average=size_average, reduce=reduce, reduction=reduction)
+        self.loss = nn.CrossEntropyLoss()
     
     def forward(self, inputs, targets):
-        return self.loss(inputs, targets).float()
+        inputs = inputs.unsqueeze(-1).float()
+        targets = targets.argmax(1).unsqueeze(-1).long()
+        return self.loss(inputs, targets)
 
 
 class Classification(BaseTask):
