@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToPILImage
 from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
 import torch.nn.functional as F
-from es2.PBT import PBT
+# from es2.PBT import PBT
 
 import argparse
 from datetime import datetime
