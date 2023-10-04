@@ -13,6 +13,18 @@ import os
 import torch.nn as nn
 
 
+class CELoss(nn.Module):
+    def __init__(self, size_average=None, reduce=None, reduction='mean'):
+        super(CELoss, self).__init__()
+        self.size_average = size_average
+        self.reduce = reduce
+        self.reduction = reduction
+        self.loss = nn.CrossEntropyLoss(size_average=size_average, reduce=reduce, reduction=reduction)
+    
+    def forward(self, inputs, targets):
+        return self.loss(inputs, targets).float()
+
+
 class Classification(BaseTask):
     def __init__(self, args) -> None:
         super().__init__()
@@ -74,7 +86,8 @@ class Classification(BaseTask):
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
-        self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        # self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
+        self.criterion = CELoss()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
