@@ -94,6 +94,8 @@ class Classification(BaseTask):
             if self.args.model_type == 'AE_DS':
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
+                if self.args.zo_method == 'CGE':
+                    print("Warning: Training CGE and use model type DS")
                 train_loss = self.train_denoiser(epoch)
             _, train_acc = self.eval(self.train_loader)
             test_loss, test_acc = self.eval(self.test_loader)
