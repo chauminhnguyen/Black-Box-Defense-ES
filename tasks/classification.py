@@ -16,7 +16,7 @@ import torch.nn as nn
 class CELoss(nn.Module):
     def __init__(self):
         super(CELoss, self).__init__()
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
     
     def forward(self, inputs, targets):
         inputs = inputs.unsqueeze(-1).float()
