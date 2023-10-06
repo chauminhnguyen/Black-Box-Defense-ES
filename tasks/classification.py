@@ -19,8 +19,11 @@ class CELoss(nn.Module):
         self.loss = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
     
     def forward(self, inputs, targets):
+        if len(targets.size()) == 1: # batch_size
+            targets = targets.unsqueeze(-1)
+        elif len(targets.size()) == 2: # batch_size, cls
+            targets = targets.argmax(1).unsqueeze(-1).long()
         inputs = inputs.unsqueeze(-1).float()
-        targets = targets.argmax(1).unsqueeze(-1).long()
         return self.loss(inputs, targets)
 
 
