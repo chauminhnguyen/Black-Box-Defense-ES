@@ -84,7 +84,12 @@ class Classification(BaseTask):
         init_logfile(logfilename, "epoch\ttime\tlr\ttrainloss\ttestloss\ttestAcc")
 
         if self.args.model_type == 'AE_DS':
-            self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
+            if self.args.train_method =='part':
+                self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.denoiser]))
+            if self.args.train_method =='whole':
+                self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.denoiser]))
+            if self.args.train_method =='whole_plus':
+                self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
@@ -192,7 +197,7 @@ class Classification(BaseTask):
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
                 recon.retain_grad()
-                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE' or self.args.zo_method == 'CGE_sim':
+                if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
@@ -281,7 +286,7 @@ class Classification(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
 
-                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+                if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)

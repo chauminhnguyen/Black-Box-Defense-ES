@@ -155,6 +155,7 @@ class Adapter_RGE_CGE():
 
             # reconstructed image * gradient estimation   <--   g(x) * a
             loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+            return loss
         
         elif self.zo_method == 'RGE':
             with torch.no_grad():
