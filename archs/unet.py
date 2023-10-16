@@ -21,5 +21,15 @@ class UNet():
         result = torch.tensor(result['predictions'])
         if len(result.shape) == 2:
             result = result.unsqueeze(0)
-        result = F.one_hot(result, num_classes=35).permute(0,3,1,2).float()
+        result = F.one_hot(result, num_classes=20).permute(0,3,1,2).float()
         return result
+    
+class DeepLab3():
+    def __init__(self, model_name, device) -> None:
+        self.model = torch.hub.load('pytorch/vision:v0.8.0', 'deeplabv3_resnet50', pretrained=True)
+        self.model.eval()
+
+    def __call__(self, images):
+        images = list(images.permute(0,2,3,1).detach().cpu().numpy())
+        output = self.model(images)['out']
+        return output

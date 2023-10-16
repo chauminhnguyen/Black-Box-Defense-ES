@@ -111,6 +111,8 @@ class Classification(BaseTask):
             scheduler.step(epoch)
             self.args.lr = scheduler.get_lr()[0]
 
+            self.save(epoch, test_acc)
+
     def train_denoiser_with_ae(self, epoch):
         """
         Function for training denoiser for one epoch
@@ -190,7 +192,7 @@ class Classification(BaseTask):
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
                 recon.retain_grad()
-                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE':
+                if self.args.zo_method == 'RGE' or self.args.zo_method == 'CGE' or self.args.zo_method == 'CGE_sim':
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
