@@ -333,7 +333,7 @@ def get_architecture(arch: str, dataset: str, pytorch_pretrained: bool=False) ->
         model = UnetEncoder(3).cuda()
         return model
     elif arch == 'unet_decoder':
-        model = UnetDecoder(3).cuda()
+        model = UnetDecoder((1,3,256,256)).cuda()
         return model
     else:
         raise Exception('Unknown architecture.')

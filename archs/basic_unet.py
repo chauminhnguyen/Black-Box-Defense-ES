@@ -32,7 +32,7 @@ class UnetEncoder(nn.Module):
         self.conv6 = Convblock(512,1024)
         self.neck = nn.Conv2d(1024,2048,3,1)
         
-    def forward(self,x):
+    def forward(self,x, decoder=None):
         
         # Encoder Network
         
@@ -57,8 +57,10 @@ class UnetEncoder(nn.Module):
         
         # BottelNeck
         neck = self.neck(pool6)
+        if decoder is not None:
+            decoder.set_conv([conv6, conv5, conv4, conv3, conv2, conv1])
         
-        return neck, [conv6, conv5, conv4, conv3, conv2, conv1]
+        return neck
     
 
 class UnetDecoder(nn.Module):
@@ -79,12 +81,12 @@ class UnetDecoder(nn.Module):
         self.out = nn.Conv2d(32,3,1,1)
         self.retain_size = retain_size
         
-    def forward(self,neck, conv):
-        conv6, conv5, conv4, conv3, conv2, conv1 = conv
+    def forward(self,x):
+        conv6, conv5, conv4, conv3, conv2, conv1 = self.conv
         
         # Decoder Network
         
-        upconv6 = self.upconv6(neck)
+        upconv6 = self.upconv6(x)
         croped = self.crop(conv6,upconv6)
         dconv6 = self.dconv6(torch.cat([upconv6,croped],1))
         # Upconv 1
@@ -124,3 +126,5 @@ class UnetDecoder(nn.Module):
         _,_,H,W = target_tensor.shape
         return transform.CenterCrop([H,W])(input_tensor)
     
+    def set_conv(self, conv):
+        self.conv = conv

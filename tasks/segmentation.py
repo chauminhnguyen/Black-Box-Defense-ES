@@ -198,7 +198,7 @@ class Segmentation(BaseTask):
 
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
             recon = self.denoiser(inputs + noise)
-            recon = self.encoder(recon)
+            recon = self.encoder(recon, self.decoder)
 
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
