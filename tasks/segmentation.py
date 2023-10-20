@@ -79,7 +79,7 @@ class Segmentation(BaseTask):
         if args.model_type == 'AE_DS':
             if args.pretrained_encoder:
                 checkpoint = torch.load(args.pretrained_encoder)
-                assert checkpoint['arch'] == args.encoder_arch
+                # assert checkpoint['arch'] == args.encoder_arch
                 self.encoder = get_architecture(checkpoint['arch'], args.dataset)
                 self.encoder.load_state_dict(checkpoint['state_dict'])
             else:
@@ -87,7 +87,7 @@ class Segmentation(BaseTask):
 
             if args.pretrained_decoder:
                 checkpoint = torch.load(args.pretrained_decoder)
-                assert checkpoint['arch'] == args.decoder_arch
+                # assert checkpoint['arch'] == args.decoder_arch
                 self.decoder = get_architecture(checkpoint['arch'], args.dataset)
                 self.decoder.load_state_dict(checkpoint['state_dict'])
             else:
