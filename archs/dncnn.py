@@ -55,6 +55,9 @@ class DnCNN(nn.Module):
 if __name__ == '__main__':
     # from IPython import embed
     # embed()
-    model = DnCNN()
+    model = DnCNN(image_channels=3)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print(pytorch_total_params)
+    a = torch.randn(4, 3, 256, 256)
+    b = model(a)
+    print(b.shape)
