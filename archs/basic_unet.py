@@ -6,7 +6,7 @@ import torchvision.transforms as transform
 
 class Convblock(nn.Module):
     def __init__(self,input_channel,output_channel,kernal=3,stride=1,padding=1):
-        super().__init__()
+        super(Convblock,self).__init__()
         self.convblock = nn.Sequential(
             nn.Conv2d(input_channel,output_channel,kernal,stride,padding),
             nn.BatchNorm2d(output_channel),
@@ -15,17 +15,15 @@ class Convblock(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        def forward(self,x):
-            x = self.convblock(x)
-            return x
+    def forward(self,x):
+        x = self.convblock(x)
+        return x
 
 
 class UnetEncoder(nn.Module):
     
     def __init__(self,input_channel):
-
-        super().__init__()
-
+        super(UnetEncoder,self).__init__()
         self.conv1 = Convblock(input_channel,32)
         self.conv2 = Convblock(32,64)
         self.conv3 = Convblock(64,128)
@@ -65,8 +63,7 @@ class UnetEncoder(nn.Module):
 
 class UnetDecoder(nn.Module):
     def __init__(self,retain_size=None):
-        super().__init__()
-        
+        super(UnetDecoder,self).__init__()
         self.upconv6 = nn.ConvTranspose2d(2048,1024,3,2,0,1)
         self.dconv6 = Convblock(2048, 1024)
         self.upconv5 = nn.ConvTranspose2d(1024,512,3,2,0,1)
