@@ -15,6 +15,7 @@ from archs.unet import build_unet
 from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
+from archs.basic_unet import UnetEncoder, UnetDecoder
 #from archs.vrnet import VariationalNetwork
 
 import torch
@@ -64,8 +65,10 @@ AUTOENCODER_ARCHITECTURES = ['cifar_encoder_48','cifar_decoder_48',
                              'restricted_imagenet_encoder_3456', 'restricted_imagenet_decoder_3456',
                              'restricted_imagenet_encoder_15552', 'restricted_imagenet_decoder_15552',
                              'stl_encoder', 'stl_decoder',
-                             'mnist_dim_encoder', 'mnist_dim_decoder'
+                             'mnist_dim_encoder', 'mnist_dim_decoder', 
+                             'unet_encoder', 'unet_decoder'
                              ]
+
 
 def get_segmentation_model(device: str) -> torch.nn.Module:
     model = build_unet(device)
@@ -322,6 +325,15 @@ def get_architecture(arch: str, dataset: str, pytorch_pretrained: bool=False) ->
     elif arch == 'imagenet_memnet':
         model = torch.nn.DataParallel(MemNet(in_channels=3, channels=64, num_memblock=3, num_resblock=6)).cuda()
         cudnn.benchmark = True
+        return model
+    
+
+    # Unet
+    elif arch == 'unet_encoder':
+        model = UnetEncoder(3).cuda()
+        return model
+    elif arch == 'unet_decoder':
+        model = UnetDecoder(3).cuda()
         return model
     else:
         raise Exception('Unknown architecture.')
