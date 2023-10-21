@@ -2,7 +2,8 @@
 import torch
 from mmseg.apis import MMSegInferencer
 import torch.nn.functional as F
-from mmcv.transforms import Resize
+# from mmcv.transforms import Resize
+from torchvision import transforms
 
 def build_unet(device):
     model_name = 'unet-s5-d16_fcn_4xb4-160k_cityscapes-512x1024'
@@ -11,7 +12,8 @@ def build_unet(device):
 
 class UNet():
     def __init__(self, model_name, device) -> None:
-        self.transform = Resize(scale=(512, 1024), keep_ratio=True)
+        # self.transform = Resize(scale=(512, 1024), keep_ratio=True)
+        self.transform = transforms.Resize((512, 1024))
         self.inferencer = MMSegInferencer(model=model_name, device=device)
         # self.model = init_model(config_path, checkpoint_path, device=device)
     
