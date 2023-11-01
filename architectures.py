@@ -16,6 +16,7 @@ from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
 from archs.basic_unet import UnetEncoder, UnetDecoder
+from archs.unet import UNet
 #from archs.vrnet import VariationalNetwork
 
 import torch
@@ -329,6 +330,9 @@ def get_architecture(arch: str, dataset: str, pytorch_pretrained: bool=False) ->
     
 
     # Unet
+    elif arch == 'unet':
+        model = UNet(34)
+        return model
     elif arch == 'unet_encoder':
         model = UnetEncoder(3).cuda()
         return model

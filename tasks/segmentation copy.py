@@ -37,8 +37,8 @@ class CELoss(nn.Module):
         targets: (n, c, h, w)
         '''
         #flatten label and prediction tensors
-        inputs = inputs.view(inputs.shape[0], inputs.shape[1], -1)
-        targets = targets.view(targets.shape[0], targets.shape[1], -1)
+        # inputs = inputs.view(inputs.shape[0], inputs.shape[1], -1)
+        # targets = targets.view(targets.shape[0], targets.shape[1], -1)
         targets_argmax = targets.argmax(axis=1)
         loss = self.criterion(inputs, targets_argmax)
         return loss.mean(axis=1).to(self.device)
@@ -94,13 +94,7 @@ class Segmentation(BaseTask):
                 self.decoder = get_architecture(args.decoder_arch, args.dataset)
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.model = get_segmentation_model(device)
-        checkpoint = torch.load(args.classifier)
-        self.model = get_architecture(checkpoint['arch'], args.dataset)
-        self.model.load_state_dict(checkpoint['state_dict'])
-        self.model.cuda().eval()
-        requires_grad_(self.model, False)
-    
+        self.model = get_segmentation_model(device)
 
     def train(self):
         starting_epoch = 0
@@ -109,12 +103,10 @@ class Segmentation(BaseTask):
         if self.args.model_type == 'AE_DS':
             if self.args.train_method =='part':
                 self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.denoiser]))
-            elif self.args.train_method =='whole':
+            if self.args.train_method =='whole':
                 self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.denoiser]))
-            elif self.args.train_method =='whole_plus':
+            if self.args.train_method =='whole_plus':
                 self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
-            elif self.args.train_method =='mid':
-                self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder]))
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
@@ -161,7 +153,7 @@ class Segmentation(BaseTask):
         end = time.time()
 
         # switch to train mode
-        # self.denoiser.train()
+        self.denoiser.train()
         
         if self.args.train_method == 'part':
             self.encoder.eval()
@@ -170,10 +162,6 @@ class Segmentation(BaseTask):
             self.encoder.train()
             self.decoder.eval()
         if self.args.train_method == 'whole_plus':
-            self.encoder.train()
-            self.decoder.train()
-        
-        if self.args.train_method == 'mid':
             self.encoder.train()
             self.decoder.train()
 
@@ -209,8 +197,8 @@ class Segmentation(BaseTask):
                     targets = targets.argmax(1).detach().clone()
 
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
-            # recon = self.denoiser(inputs + noise)
-            recon = self.encoder(inputs + noise, self.decoder)
+            recon = self.denoiser(inputs + noise)
+            recon = self.encoder(recon, self.decoder)
 
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
