@@ -96,8 +96,8 @@ class Segmentation(BaseTask):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.model = get_segmentation_model(device)
         checkpoint = torch.load(args.classifier)
-        self.model = get_architecture(checkpoint['arch'], args.dataset)
-        self.model.load_state_dict(checkpoint['state_dict'])
+        self.model = get_architecture('unet', args.dataset)
+        self.model.load_state_dict(checkpoint)
         self.model.cuda().eval()
         requires_grad_(self.model, False)
     

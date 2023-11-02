@@ -11,7 +11,6 @@ from archs.mnist_resnet import MnistResNet101 as resnet101_mnist
 from archs.memnet import MemNet
 from archs.wrn import WideResNet
 from archs.stl_resnet import STL10_ResNet18
-from archs.unet import build_unet
 from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
