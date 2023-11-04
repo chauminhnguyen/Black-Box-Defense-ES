@@ -47,10 +47,8 @@ class CELoss(nn.Module):
 
 
 class Segmentation_Measure:
-    def __init__(self, args):
-        self.args = args
-        self.load_data()
-        self.build_model(self.args)
+    def __init__(self):
+        pass
     
     def pixel_accuracy(self, pred, ground_truth):
         with torch.no_grad():
