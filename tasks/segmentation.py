@@ -13,6 +13,8 @@ from torchvision import transforms
 from datasets import Cityscapes
 import torch.nn.functional as F
 from architectures import get_architecture
+from sklearn.metrics import jaccard_score,cohen_kappa_score
+
 
 class Decoder_Segmentation(nn.Module):
     def __init__(self, decoder, model):
@@ -43,12 +45,45 @@ class CELoss(nn.Module):
         loss = self.criterion(inputs, targets_argmax)
         return loss.mean(axis=1).to(self.device)
 
+
+class Segmentation_Measure:
+    def __init__(self, args):
+        self.args = args
+        self.load_data()
+        self.build_model(self.args)
+    
+    def pixel_accuracy(self, pred, ground_truth):
+        with torch.no_grad():
+            pred = torch.argmax(pred, dim=1) #dim =1 => over rows
+            correct = torch.eq(pred, ground_truth).int()  # the o/p here is 0 , 1
+            accuracy = float(correct.sum()) / float(correct.numel())
+        return accuracy
+
+    def mIoU(self, pred, ground_truth):
+        with torch.no_grad():
+            # normalize the output becuse (we have identity activation functions) linear (same output)
+            pred         = torch.argmax(pred, dim=1)
+            pred         = pred.cpu().contiguous().view(-1).numpy() # make it 1D
+            ground_truth = ground_truth.cpu().contiguous().view(-1).numpy() # make it 1D
+            MIoU=jaccard_score(ground_truth, pred,average='macro') #'none' per class
+        return MIoU
+
+    def kapp_score_Value(self, pred, ground_truth):
+        with torch.no_grad():
+            pred = torch.argmax(pred, dim=1)
+            pred = pred.cpu().contiguous().view(-1).numpy() # make it 1D
+            ground_truth = ground_truth.cpu().contiguous().view(-1).numpy() # make it 1D
+            kapp_score = cohen_kappa_score(ground_truth, ground_truth)
+
+        return kapp_score
+
 class Segmentation(BaseTask):
     def __init__(self, args) -> None:
         super().__init__()
         self.args = args
         self.load_data()
         self.build_model(self.args)
+        self.measures = Segmentation_Measure()
         
     def load_data(self):
         print("Load dataset for segmentation task")
@@ -330,8 +365,8 @@ class Segmentation(BaseTask):
         batch_time = AverageMeter()
         data_time = AverageMeter()
         losses = AverageMeter()
-        top1 = AverageMeter()
-        top5 = AverageMeter()
+        mAcc = AverageMeter()
+        mIOU = AverageMeter()
         end = time.time()
 
         # switch to eval mode
@@ -361,10 +396,13 @@ class Segmentation(BaseTask):
                 loss_mean = loss.mean()
 
                 # measure accuracy and record loss
-                acc1, acc5 = accuracy(outputs, targets, topk=(1, 5))
+                # acc1, acc5 = accuracy(outputs, targets, topk=(1, 5))
+                acc = self.measures.pixel_accuracy(outputs, targets)
+                miou = self.measures.mIoU(outputs, targets)
+                
                 losses.update(loss_mean.item(), inputs.size(0))
-                top1.update(acc1.item(), inputs.size(0))
-                top5.update(acc5.item(), inputs.size(0))
+                mAcc.update(acc.item(), inputs.size(0))
+                mIOU.update(miou.item(), inputs.size(0))
 
                 # measure elapsed time
                 batch_time.update(time.time() - end)
@@ -375,13 +413,13 @@ class Segmentation(BaseTask):
                     ''Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'' \
                     ''Data {data_time.val:.3f} ({data_time.avg:.3f})\t'' \
                     ''Loss {loss.val:.4f} ({loss.avg:.4f})\t'' \
-                    ''Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'' \
-                    ''Acc@5 {top5.val:.3f} ({top5.avg:.3f})\n'.format(
+                    ''mACC {mAcc.val:.3f} ({mAcc.avg:.3f})\t'' \
+                    ''mIOU {mIOU.val:.3f} ({mIOU.avg:.3f})\n'.format(
                         i, len(loader), batch_time=batch_time,
-                        data_time=data_time, loss=losses, top1=top1, top5=top5)
+                        data_time=data_time, loss=losses, mAcc=mAcc, mIOU=mIOU)
 
                     print(log)
-            return (losses.avg, top1.avg)
+            return (losses.avg, mAcc.avg)
 
     def test(self):
         pass
