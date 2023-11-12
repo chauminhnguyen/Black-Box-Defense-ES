@@ -9,6 +9,7 @@ from torchvision.transforms import ToPILImage
 from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code, requires_grad_, measurement
 import torch.nn.functional as F
 # from es2.PBT import PBT
+import wandb
 
 import argparse
 from datetime import datetime
@@ -38,6 +39,7 @@ parser.add_argument('--ground_truth', default='original_output', type=str,
 
 # Dataset
 parser.add_argument('--dataset', type=str, choices=DATASETS)
+parser.add_argument('--dataset_path', type=str, default="/home/chaunm/Projects/mmsegmentation/data/cityscapes/")
 parser.add_argument('--data_min', default=-2.5090184, type=float, help='minimum value of training data')
 parser.add_argument('--data_max', default=3.3369503, type=float, help='maximum value of training data')
 
@@ -75,7 +77,7 @@ parser.add_argument('--pretrained-decoder', default='', type=str, help='path to 
 # Model to be trained
 parser.add_argument('--train_method', default='whole', type=str,
                     help="*part*: only denoiser parameters would be optimized; *whole*: denoiser and encoder parameters would be optimized, *whole_plus*: denoiser and auto-encoder parameters would be optimized",
-                    choices=['part', 'whole', 'whole_plus'])
+                    choices=['part', 'whole', 'whole_plus', 'mid'])
 parser.add_argument('--PBT', action="store_true")
 
 # Training Setting
@@ -120,6 +122,7 @@ toPilImage = ToPILImage()
 
 
 def main():
+
     if args.gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
@@ -131,9 +134,10 @@ def main():
 
     # --------------------- Start Training -------------------------------
     if args.PBT:
-        pbt = PBT(args)
-        pbt.run()
-        pbt.visualize()
+        # pbt = PBT(args)
+        # pbt.run()
+        # pbt.visualize()
+        pass
     elif args.train_objective == 'classification':
         task = Classification(args)
         task.train()

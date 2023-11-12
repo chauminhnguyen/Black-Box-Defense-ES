@@ -14,6 +14,7 @@ from datasets import Cityscapes
 import torch.nn.functional as F
 from architectures import get_architecture
 from sklearn.metrics import jaccard_score,cohen_kappa_score
+import wandb
 
 
 class Decoder_Segmentation(nn.Module):
@@ -83,19 +84,31 @@ class Segmentation(BaseTask):
         self.build_model(self.args)
         self.measures = Segmentation_Measure()
         
+        # Log in to your W&B account
+        wandb.login()
+        wandb.init(
+        # Set the project where this run will be logged
+        project="Black-Box Defense Segmentation", 
+        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+        name=f"experiment_{args.wandb_name}",
+        # Track hyperparameters and run metadata
+        config=args)
+        wandb.watch(self.encoder)
+        wandb.watch(self.decoder)
+
+        
     def load_data(self):
         print("Load dataset for segmentation task")
-        dataset_path = "/content/mmsegmentation/data/cityscapes"
         train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5), \
                                         transforms.RandomVerticalFlip(p=0.5), \
                                         transforms.ToTensor()])
         
         test_transform = transforms.Compose([transforms.ToTensor()])
 
-        temp = Cityscapes(dataset_path, split='train', batch_size=self.args.batch, transform=train_transform)
+        temp = Cityscapes(self.args.dataset_path, split='train', batch_size=self.args.batch, transform=train_transform)
         self.train_loader = temp.build_data()
 
-        temp = Cityscapes(dataset_path, split='test', batch_size=self.args.batch, transform=test_transform)
+        temp = Cityscapes(self.args.dataset_path, split='train', batch_size=self.args.batch, transform=test_transform)
         self.test_loader = temp.build_data()
 
     def build_model(self, args):
@@ -146,8 +159,8 @@ class Segmentation(BaseTask):
                 self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.denoiser]))
             elif self.args.train_method =='whole_plus':
                 self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder, self.denoiser]))
-            elif self.args.train_method =='mid':
-                self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder]))
+            # elif self.args.train_method =='mid':
+            #     self.optimizer = build_opt(self.args.optimizer, nn.ModuleList([self.encoder, self.decoder]))
         elif self.args.model_type == 'DS':
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
@@ -163,15 +176,19 @@ class Segmentation(BaseTask):
             elif self.args.model_type == 'DS':
                 train_loss = self.train_denoiser(epoch)
             _, train_acc = self.eval(self.train_loader)
-            test_loss, test_acc = self.eval(self.test_loader)
+            test_loss, test_mAcc, test_mIOU = self.eval(self.test_loader)
             
             after = time.time()
 
-            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
-                epoch, after - before, self.args.lr, train_loss, test_loss, train_acc, test_acc))
+            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                epoch, after - before, self.args.lr, train_loss, test_loss, train_acc, test_mAcc, test_mIOU))
+            
+            wandb.log({"train_loss": train_loss, "test_loss": test_loss, "train_acc": train_acc, "test_mAcc": test_mAcc, "test_mIOU": test_mIOU})
+            # wandb.log({"loss": loss, "mAcc": mAcc, "mIOU": mIOU})
 
             scheduler.step(epoch)
             self.args.lr = scheduler.get_lr()[0]
+        wandb.finish()
 
     def train_denoiser_with_ae(self, epoch):
         """
@@ -194,7 +211,7 @@ class Segmentation(BaseTask):
         end = time.time()
 
         # switch to train mode
-        # self.denoiser.train()
+        self.denoiser.train()
         
         if self.args.train_method == 'part':
             self.encoder.eval()
@@ -206,9 +223,9 @@ class Segmentation(BaseTask):
             self.encoder.train()
             self.decoder.train()
         
-        if self.args.train_method == 'mid':
-            self.encoder.train()
-            self.decoder.train()
+        # if self.args.train_method == 'mid':
+        #     self.encoder.train()
+        #     self.decoder.train()
 
         class loss_fn:
             def __init__(self, criterion, segmentation_model):
@@ -242,13 +259,14 @@ class Segmentation(BaseTask):
                     targets = targets.argmax(1).detach().clone()
 
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
-            # recon = self.denoiser(inputs + noise)
-            recon = self.encoder(inputs + noise, self.decoder)
+            recon = self.denoiser(inputs + noise)
+            recon = self.encoder(recon, self.decoder)
 
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
                 recon = self.model(recon)
-                loss = self.criterion(recon, targets)
+                # loss = self.criterion(recon, targets)
+                loss = CrossEntropyLoss()(recon, targets)
 
                 # record loss
                 losses.update(loss.item(), inputs.size(0))
@@ -260,6 +278,8 @@ class Segmentation(BaseTask):
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
+
+                losses.update(loss.item(), inputs.size(0))
             
 
             # compute gradient and do SGD step
@@ -339,6 +359,8 @@ class Segmentation(BaseTask):
                 else:
                     loss = self.es_adapter.run(inputs, targets)
 
+                losses.update(loss.item(), inputs.size(0))
+
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
             loss.backward()
@@ -399,8 +421,8 @@ class Segmentation(BaseTask):
                 miou = self.measures.mIoU(outputs, targets)
                 
                 losses.update(loss_mean.item(), inputs.size(0))
-                mAcc.update(acc.item(), inputs.size(0))
-                mIOU.update(miou.item(), inputs.size(0))
+                mAcc.update(acc, inputs.size(0))
+                mIOU.update(miou, inputs.size(0))
 
                 # measure elapsed time
                 batch_time.update(time.time() - end)
@@ -417,7 +439,61 @@ class Segmentation(BaseTask):
                         data_time=data_time, loss=losses, mAcc=mAcc, mIOU=mIOU)
 
                     print(log)
-            return (losses.avg, mAcc.avg)
+
+            return (losses.avg, mAcc.avg, mIOU.avg)
 
     def test(self):
-        pass
+        print("Test model for segmentation task.")
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        losses = AverageMeter()
+        mAcc = AverageMeter()
+        mIOU = AverageMeter()
+        end = time.time()
+
+        # switch to eval mode
+        self.denoiser.eval()
+        if self.args.model_type == 'AE_DS':
+            self.encoder.eval()
+            self.decoder.eval()
+
+        with torch.no_grad():
+            for i, (inputs, targets) in enumerate(self.test_loader):
+                # measure data loading time
+                data_time.update(time.time() - end)
+
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+
+                # augment inputs with noise
+                inputs = inputs + torch.randn_like(inputs, device='cuda') * self.args.noise_sd
+
+                if self.denoiser is not None:
+                    inputs = self.denoiser(inputs)
+                # compute output
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
+                loss_mean = loss.mean()
+
+                # measure accuracy and record loss
+                # acc1, acc5 = accuracy(outputs, targets, topk=(1, 5))
+                acc = self.measures.pixel_accuracy(outputs, targets)
+                miou = self.measures.mIoU(outputs, targets)
+                
+                losses.update(loss_mean.item(), inputs.size(0))
+                mAcc.update(acc, inputs.size(0))
+                mIOU.update(miou, inputs.size(0))
+
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                if i % self.args.print_freq == 0:
+                    log = 'Test: [{0}/{1}]\t'' \
+                    ''Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'' \
+                    ''Data {data_time.val:.3f} ({data_time.avg:.3f})\t'' \
+                    ''Loss {loss.val:.4f} ({loss.avg:.4f})\t'' \
+                    ''mACC {mAcc.val:.3f} ({mAcc.avg:.3f})\t'' \
+                    ''mIOU {mIOU.val:.3f} ({mIOU.avg:.3f})\n'.format(
+                        i, len(self.test_loader), batch_time=batch_time,
+                        data_time=data_time, loss=losses, mAcc=mAcc)
