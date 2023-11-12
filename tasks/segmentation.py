@@ -175,19 +175,21 @@ class Segmentation(BaseTask):
                 train_loss = self.train_denoiser_with_ae(epoch)
             elif self.args.model_type == 'DS':
                 train_loss = self.train_denoiser(epoch)
-            _, train_acc = self.eval(self.train_loader)
+            _, train_mAcc, train_m_Iou = self.eval(self.train_loader)
             test_loss, test_mAcc, test_mIOU = self.eval(self.test_loader)
             
             after = time.time()
 
-            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
-                epoch, after - before, self.args.lr, train_loss, test_loss, train_acc, test_mAcc, test_mIOU))
+            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                epoch, after - before, self.args.lr, train_loss, test_loss, train_mAcc, train_m_Iou, test_mAcc, test_mIOU))
             
-            wandb.log({"train_loss": train_loss, "test_loss": test_loss, "train_acc": train_acc, "test_mAcc": test_mAcc, "test_mIOU": test_mIOU})
+            wandb.log({"train_loss": train_loss, "test_loss": test_loss, "train_mAcc": train_mAcc, "train_mIOU": train_m_Iou, "test_mAcc": test_mAcc, "test_mIOU": test_mIOU})
             # wandb.log({"loss": loss, "mAcc": mAcc, "mIOU": mIOU})
 
             scheduler.step(epoch)
             self.args.lr = scheduler.get_lr()[0]
+
+            self.save(epoch, test_mAcc * test_mIOU)
         wandb.finish()
 
     def train_denoiser_with_ae(self, epoch):
