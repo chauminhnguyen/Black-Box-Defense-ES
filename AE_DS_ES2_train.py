@@ -29,6 +29,9 @@ from tasks.segmentation import Segmentation
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 
+parser.add_argument('--wandb_name', default='experiment', type=str,
+                    help="Name for the Wandb")
+
 # Training Objective
 parser.add_argument('--train_objective', default='classification', type=str,
                     help="The whole model is built for classificaiton / reconstruction",

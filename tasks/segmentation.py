@@ -90,7 +90,7 @@ class Segmentation(BaseTask):
         # Set the project where this run will be logged
         project="Black-Box Defense Segmentation", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"experiment_{args.wandb_name}",
+        name=f"{args.wandb_name}",
         # Track hyperparameters and run metadata
         config=args)
         wandb.watch(self.encoder)
