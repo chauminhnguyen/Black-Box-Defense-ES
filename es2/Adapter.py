@@ -4,24 +4,24 @@ import torch
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Adapter():
-    def __init__(self, zo_method, q, loss_fn, model) -> None:
-        self.q = q
+    def __init__(self, zo_method, subspace, loss_fn, model) -> None:
+        self.subspace = subspace
         self.mu = 0.005
         self.sigma = 0.01
         self.beta = 0.5
         # self.zo_method = zo_method
         if zo_method =='GES':
-            self.med = GES(self.sigma, self.beta, loss_fn)
+            self.med = GES(self.subspace, self.sigma, self.beta, loss_fn)
         elif zo_method =='SGES':
             # self.med = SGES(self.q, self.sigma, self.mu, True)
-            self.med = SGES(self.sigma, self.beta, loss_fn, True)
+            self.med = SGES(self.subspace, self.sigma, self.beta, loss_fn, True)
         # elif zo_method =='RGE':
         #     self.med = RGE(self.q, self.sigma, self.mu)
         
         # self.loss_fn = loss_fn
         # self.model = model
 
-    def run(self, ori_inputs, inputs, targets):
+    def run(self, inputs, targets):
         # batch_size = inputs.size()[0]
         
         # recon_pre = self.model(inputs)  # (batch_size, 10)
@@ -34,7 +34,7 @@ class Adapter():
 
         # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
         # self.loss_fn.set_target(targets_)
-        grad_est_no_grad, recon_flat = self.med.run(ori_inputs, inputs, targets)
+        grad_est_no_grad, recon_flat = self.med.run(inputs, targets)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
         loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean

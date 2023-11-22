@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 class GES:
-    def __init__(self, sigma, beta, loss_fn):
+    def __init__(self, subspace, sigma, beta, loss_fn):
         '''
         q: number of samples
         sigma: noise scale
@@ -10,32 +10,31 @@ class GES:
         '''
         self.U = None
         # self.surg_grads = []
-        # self.q = q
+        self.n = subspace
         self.sigma = sigma
         self.beta = beta
         # self.k = k # subspace dimensions
         self.alpha = 1
         self.loss_fn = loss_fn
     
-    def run(self, ori_inputs, inputs, targets):
+    def run(self, inputs, targets):
         # inputs shape: (batch, channel, h, w)
-        batch_size = ori_inputs.size()[0]
-        channel = ori_inputs.size()[1]
-        h = ori_inputs.size()[2]
-        w = ori_inputs.size()[3]
+        batch_size = inputs.size()[0]
+        channel = inputs.size()[1]
+        h = inputs.size()[2]
+        w = inputs.size()[3]
 
-        n = inputs.size()[1] # Subspace
         k = channel * h * w # Param space
 
-        a = self.sigma * np.sqrt(self.alpha / n)
+        a = self.sigma * np.sqrt(self.alpha / self.n)
         c = self.sigma * np.sqrt((1 - self.alpha) / k)
 
         if self.alpha > 0.5:
             # u_flat
-            noise = a * torch.rand(batch_size, n, k)
+            noise = a * torch.rand(batch_size, self.n, k)
             self.alpha = 0.5
         else:
-            noise = a * torch.rand(batch_size, n).cuda() + c * torch.rand(batch_size, k).cuda() @ self.U.T
+            noise = a * torch.rand(batch_size, self.n).cuda() + c * torch.rand(batch_size, k).cuda() @ self.U.T
         
         # noise shape: (batch, k)
         u = noise
