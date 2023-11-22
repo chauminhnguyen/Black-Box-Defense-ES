@@ -840,12 +840,14 @@ def train_ae(loader: DataLoader, encoder: torch.nn.Module, decoder: torch.nn.Mod
 
             # elif args.zo_method =='GES':
             else:
-                recon_pre = classifier(decoder(recon))  # (batch_size, 10)
-                loss_0 = criterion(recon_pre, targets)  # (batch_size )
-                loss_0_mean = loss_0.mean()
-                losses.update(loss_0_mean.item(), inputs.size(0))
-                if recon.shape[0] != args.batch:
-                    continue
+                # recon_pre = classifier(decoder(recon))  # (batch_size, 10)
+                # loss_0 = criterion(recon_pre, targets)  # (batch_size )
+                # loss_0_mean = loss_0.mean()
+                # losses.update(loss_0_mean.item(), inputs.size(0))
+                
+                # if recon.shape[0] != args.batch:
+                #     continue
+                
                 targets_ = targets.view(batch_size, 1).repeat(1, args.q).view(batch_size * args.q)
                 loss_fn.set_target(targets_)
                 grad_est_no_grad, recon_flat = med.run(recon, loss_fn)

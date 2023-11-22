@@ -8,33 +8,33 @@ class Adapter():
         self.q = q
         self.mu = 0.005
         self.sigma = 0.01
-        self.zo_method = zo_method
+        self.beta = 0.5
+        # self.zo_method = zo_method
         if zo_method =='GES':
-            self.med = GES(self.q, self.sigma, self.mu)
+            self.med = GES(self.sigma, self.beta, loss_fn)
         elif zo_method =='SGES':
-            self.med = SGES(self.q, self.sigma, self.mu, True)
+            # self.med = SGES(self.q, self.sigma, self.mu, True)
+            self.med = SGES(self.sigma, self.beta, loss_fn, True)
         # elif zo_method =='RGE':
         #     self.med = RGE(self.q, self.sigma, self.mu)
         
-        self.loss_fn = loss_fn
-        self.model = model
-    def run(self, inputs, targets):
-        batch_size = inputs.size()[0]
-        channel = inputs.size()[1]
-        h = inputs.size()[2]
-        w = inputs.size()[3]
-        d = channel * h * w
+        # self.loss_fn = loss_fn
+        # self.model = model
+
+    def run(self, ori_inputs, inputs, targets):
+        # batch_size = inputs.size()[0]
         
         # recon_pre = self.model(inputs)  # (batch_size, 10)
         # loss_0 = criterion(recon_pre, targets)  # (batch_size )
         # loss_0_mean = loss_0.mean()
         # losses.update(loss_0_mean.item(), inputs.size(0))
-        if inputs.shape[0] != batch_size:
-            return
+        
+        # if inputs.shape[0] != batch_size:
+        #     return
 
-        targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
-        self.loss_fn.set_target(targets_)
-        grad_est_no_grad, recon_flat = self.med.run(inputs, self.loss_fn)
+        # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
+        # self.loss_fn.set_target(targets_)
+        grad_est_no_grad, recon_flat = self.med.run(ori_inputs, inputs, targets)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
         loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
@@ -78,7 +78,7 @@ class Adapter_RGE_CGE():
 
                 # record original loss
                 loss_0_mean = loss_0.mean()
-                self.losses.update(loss_0_mean.item(), inputs.size(0))
+                # self.losses.update(loss_0_mean.item(), inputs.size(0))
 
                 recon_flat_no_grad = torch.flatten(inputs, start_dim=1).to(DEVICE)
                 grad_est = torch.zeros(batch_size, d).to(DEVICE)
@@ -114,6 +114,8 @@ class Adapter_RGE_CGE():
 
             # reconstructed image * gradient estimation   <--   g(x) * a
             loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()
+            
+            # self.losses.update(loss, inputs.size(0))
             return loss
         
         elif self.zo_method == 'CGE_sim':

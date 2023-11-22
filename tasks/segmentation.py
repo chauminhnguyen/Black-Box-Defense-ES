@@ -183,11 +183,11 @@ class Segmentation(BaseTask):
             log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
                 epoch, after - before, self.args.lr, train_loss, test_loss, train_mAcc, train_m_Iou, test_mAcc, test_mIOU))
             
-            wandb.log({"train_loss": train_loss, "test_loss": test_loss, "train_mAcc": train_mAcc, "train_mIOU": train_m_Iou, "test_mAcc": test_mAcc, "test_mIOU": test_mIOU})
-            # wandb.log({"loss": loss, "mAcc": mAcc, "mIOU": mIOU})
+            wandb.log({"test_loss": test_loss, "train_mAcc": train_mAcc, "train_m_Iou": train_m_Iou, "test_mAcc": test_mAcc, "test_mIOU": test_mIOU})
 
             scheduler.step(epoch)
             self.args.lr = scheduler.get_lr()[0]
+            wandb.log({"lr": self.args.lr})
 
             self.save(epoch, test_mAcc * test_mIOU)
         wandb.finish()
@@ -265,10 +265,10 @@ class Segmentation(BaseTask):
             recon = self.encoder(recon, self.decoder)
 
             if self.args.optimization_method == 'FO':
-                recon = self.decoder(recon)
-                recon = self.model(recon)
+                post_recon = self.decoder(recon)
+                post_recon = self.model(post_recon)
                 # loss = self.criterion(recon, targets)
-                loss = CrossEntropyLoss()(recon, targets)
+                loss = CrossEntropyLoss()(recon, post_recon)
 
                 # record loss
                 losses.update(loss.item(), inputs.size(0))
@@ -277,11 +277,12 @@ class Segmentation(BaseTask):
                 recon.requires_grad_(True)
                 recon.retain_grad()
                 if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
-                    loss = self.es_adapter.run(inputs, recon, targets)
+                    targets_reshaped = torch.flatten(targets, start_dim=2)
+                    loss = self.es_adapter.run(inputs, recon, targets_reshaped)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
 
-                losses.update(loss.item(), inputs.size(0))
+                # losses.update(loss.item(), inputs.size(0))
             
 
             # compute gradient and do SGD step
@@ -301,6 +302,7 @@ class Segmentation(BaseTask):
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
                     epoch, i, len(self.train_loader), batch_time=batch_time,
                     data_time=data_time, loss=losses))
+                wandb.log({"train_loss": loss})
         return losses.avg
 
     def train_denoiser(self, epoch):
@@ -357,11 +359,12 @@ class Segmentation(BaseTask):
                 recon.retain_grad()
 
                 if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
-                    loss = self.es_adapter.run(inputs, recon, targets)
+                    targets_reshaped = torch.flatten(targets, start_dim=2)
+                    loss = self.es_adapter.run(inputs, recon, targets_reshaped)
                 else:
                     loss = self.es_adapter.run(inputs, targets)
 
-                losses.update(loss.item(), inputs.size(0))
+                # losses.update(loss.item(), inputs.size(0))
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
@@ -380,6 +383,7 @@ class Segmentation(BaseTask):
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
                     epoch, i, len(self.train_loader), batch_time=batch_time,
                     data_time=data_time, loss=losses))
+                wandb.log({"train_loss": loss})
         return losses.avg
 
     def eval(self, loader):

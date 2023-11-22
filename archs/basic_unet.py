@@ -58,7 +58,8 @@ class UnetEncoder(nn.Module):
         # BottelNeck
         neck = self.neck(pool6)
         if decoder is not None:
-            decoder.set_conv([conv6, conv5, conv4, conv3, conv2, conv1])
+            decoder.set_conv([conv6.detach(), conv5.detach(), conv4.detach(), \
+                conv3.detach(), conv2.detach(), conv1.detach()])
         
         return neck
     
