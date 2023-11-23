@@ -244,18 +244,18 @@ class Classification(BaseTask):
         self.denoiser.train()
         self.model.eval()
 
-        class loss_fn():
+        class loss_fn:
             def __init__(self, criterion, classifier):
                 self.classifier = classifier
                 self.criterion = criterion
             
-            def set_target(self, targets):
-                self.targets = targets
+            # def set_target(self, targets):
+            #     self.targets = targets
             
-            def __call__(self, inputs_q):
+            def __call__(self, inputs_q, targets):
                 inputs_q_pre = self.classifier(inputs_q)
-                loss_tmp_plus = self.criterion(inputs_q_pre, self.targets)
-                return loss_tmp_plus
+                loss = self.criterion(inputs_q_pre, targets)
+                return loss
 
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses)

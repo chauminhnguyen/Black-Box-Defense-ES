@@ -34,10 +34,11 @@ class Adapter():
 
         # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
         # self.loss_fn.set_target(targets_)
-        grad_est_no_grad, recon_flat = self.med.run(inputs, targets)
+        grad_est_no_grad = self.med.run(inputs, targets)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
-        loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
+        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+        loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
         return loss
     
 

@@ -31,13 +31,14 @@ class GES:
 
         if self.alpha > 0.5:
             # u_flat
-            noise = a * torch.rand(batch_size, self.n, k)
+            noise = a * torch.rand(batch_size, k).cuda()
             self.alpha = 0.5
         else:
             noise = a * torch.rand(batch_size, self.n).cuda() + c * torch.rand(batch_size, k).cuda() @ self.U.T
         
-        # noise shape: (batch, k)
-        u = noise
+        u = noise.view(-1, channel, h, w)
+        # noise shape: (batch, k), u shape: (batch, channel, h, w)
+
         # noise = noise.view(batch_size * self.q, d).cuda()
         # u = noise.view(-1, channel, h, w)
 
@@ -61,7 +62,7 @@ class GES:
             # grad_est = noise * loss_diff.reshape(batch_size * self.q, 1).expand_as(u_flat) / (2 * self.q * self.sigma ** 2)
             # grad_est = grad_est.view(batch_size, self.q, d).sum(1, keepdim=True).view(batch_size,d)
             
-            grad_ests = torch.bmm(noise, loss_diff)
+            grad_ests = torch.bmm(noise.unsqueeze(-1), loss_diff.unsqueeze(-1))
             # grad_ests shape: (batch, k)
             g_hat = self.beta / (2 * self.sigma**2 * batch_size) * torch.sum(grad_ests, dim=0)
             # grad_est shape: (1, k)
@@ -73,7 +74,7 @@ class GES:
             # self.U, _ = torch.linalg.qr(surg_grads_tensor.T)
             self.U, _ = torch.linalg.qr(grad_ests)
 
-        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
-        g_hat_no_grad = g_hat.detach()
+        
+        # g_hat_no_grad = g_hat.detach()
 
-        return g_hat_no_grad, recon_flat
+        return g_hat
