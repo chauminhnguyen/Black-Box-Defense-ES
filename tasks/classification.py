@@ -289,7 +289,7 @@ class Classification(BaseTask):
                 if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
-                    loss = self.es_adapter.run(inputs, targets)
+                    loss = self.es_adapter.run(recon, targets)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
