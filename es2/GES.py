@@ -36,7 +36,8 @@ class GES:
             noise = a * torch.rand(batch_size, k).cuda()
             # self.alpha = 0.5
         else:
-            self.U, _ = torch.linalg.qr(self.surg_grads)
+            self.alpha = 0.5
+            self.U, _ = torch.linalg.qr(np.array(self.surg_grads).T)
             noise = a * torch.rand(batch_size, self.n).cuda() + c * torch.rand(batch_size, k).cuda() @ self.U.T
         
         u = noise.view(-1, channel, h, w)
