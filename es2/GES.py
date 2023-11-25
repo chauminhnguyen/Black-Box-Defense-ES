@@ -10,13 +10,14 @@ class GES:
         '''
         self.U = None
         self.surg_grads = []
-        self.n = subspace
+        self.k = subspace
         self.sigma = sigma
         self.beta = beta
         self.alpha = 1
         self.loss_fn = loss_fn
         self.remain = None
         self.cur_iter = 0
+        self.P = 200
     
     def run(self, inputs, targets):
         # inputs shape: (batch, channel, h, w)
@@ -25,43 +26,50 @@ class GES:
         h = inputs.size()[2]
         w = inputs.size()[3]
 
-        k = channel * h * w # Param space
+        n = channel * h * w # Param space
 
-        a = self.sigma * np.sqrt(self.alpha / self.n)
-        c = self.sigma * np.sqrt((1 - self.alpha) / k)
+        a = self.sigma * np.sqrt(self.alpha / self.k)
+        c = self.sigma * np.sqrt((1 - self.alpha) / n)
 
         # if self.alpha > 0.5:
-        if self.cur_iter < self.n:
+        noise = []
+        # for i in self.P:
+        if self.cur_iter < self.k:
             # u_flat
-            noise = a * torch.rand(batch_size, k).cuda()
+            noise.append(a * torch.rand(self.P, batch_size, n).cuda())
             # self.alpha = 0.5
+            self.cur_iter += 1
         else:
             self.alpha = 0.5
-            self.U, _ = torch.linalg.qr(np.array(self.surg_grads).T)
-            noise = a * torch.rand(batch_size, self.n).cuda() + c * torch.rand(batch_size, k).cuda() @ self.U.T
+            self.U, _ = torch.linalg.qr(torch.stack(self.surg_grads).T)
+            noise.append(a * torch.rand(self.P, batch_size, n).cuda() + c * torch.rand(self.P, batch_size, self.k).cuda() @ self.U.T)
         
-        u = noise.view(-1, channel, h, w)
-        # noise shape: (batch, k), u shape: (batch, channel, h, w)
+        noise = torch.cat(noise)
+        # noise shape: (P, batch, k)
+
+        u = noise.view(self.P, batch_size, channel, h, w)
+        # u shape: (P, batch, channel, h, w)
 
 
         with torch.no_grad():
-            # input shape (batch, k) +/- noise shape (batch, k)
-            input_q_plus = inputs + u
-            input_q_minus = inputs - u
-
-            loss_tmp_plus = self.loss_fn(input_q_plus, targets)
-            loss_tmp_minus = self.loss_fn(input_q_minus, targets)
-            # loss_tmp_plus and loss_tmp_minus shape: (batch, 1)
-
-            loss_diff = loss_tmp_plus - loss_tmp_minus
-            # loss_diff shape: (batch, 1)
+            # input shape (P - repeat, batch, channel, h, w) +/- noise shape (P, batch, channel, h, w)
+            input_q_plus_arr = inputs.repeat(self.P, 1, 1, 1, 1) + u
+            input_q_minus_arr = inputs.repeat(self.P, 1, 1, 1, 1) - u
             
-            grad_ests = torch.bmm(noise.unsqueeze(-1), loss_diff.unsqueeze(-1)).squeeze(-1)
-            # grad_ests shape: (batch, k)
+            loss_diff = []
+            for input_q_plus, input_q_minus in zip(input_q_plus_arr, input_q_minus_arr):
+                loss_tmp_plus = self.loss_fn(input_q_plus, targets)
+                loss_tmp_minus = self.loss_fn(input_q_minus, targets)
+                # loss_tmp_plus and loss_tmp_minus shape: (P, batch, 1)
+                loss_diff.extend(loss_tmp_plus - loss_tmp_minus)
+                # loss_diff shape: (P, batch, 1)
+            loss_diff = torch.stack(loss_diff)
+            grad_ests = torch.bmm(noise.view(-1, n).unsqueeze(-1), loss_diff.unsqueeze(-1)).squeeze(-1)
+            # grad_ests shape: (P, batch, k)
             g_hat = self.beta / (2 * self.sigma**2 * batch_size) * torch.sum(grad_ests, dim=0)
-            # g_hat shape: (k, )
+            # g_hat shape: (batch, k)
             
-            if self.cur_iter > self.n:
+            if self.cur_iter > self.k:
                 self.surg_grads.pop(0)
             self.surg_grads.append(g_hat)
 

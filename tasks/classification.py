@@ -170,7 +170,7 @@ class Classification(BaseTask):
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
             model = nn.Sequential(self.decoder, self.model)
-            self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, model), self.model)
+            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=loss_fn(self.criterion, model), losses=losses, model=self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -260,7 +260,8 @@ class Classification(BaseTask):
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses)
         else:
-            self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
+            # self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
+            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=loss_fn(self.criterion, self.model), losses=losses, model=self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time

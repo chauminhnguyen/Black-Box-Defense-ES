@@ -4,17 +4,19 @@ import torch
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Adapter():
-    def __init__(self, zo_method, subspace, loss_fn, model) -> None:
+    def __init__(self, zo_method, subspace, criterion, losses, model) -> None:
         self.subspace = subspace
         self.mu = 0.005
         self.sigma = 0.01
         self.beta = 0.5
+        self.criterion = criterion
+        self.losses = losses
         # self.zo_method = zo_method
         if zo_method =='GES':
-            self.med = GES(self.subspace, self.sigma, self.beta, loss_fn)
+            self.med = GES(self.subspace, self.sigma, self.beta, criterion)
         elif zo_method =='SGES':
             # self.med = SGES(self.q, self.sigma, self.mu, True)
-            self.med = SGES(self.subspace, self.sigma, self.beta, loss_fn, True)
+            self.med = SGES(self.subspace, self.sigma, self.beta, criterion, True)
         # elif zo_method =='RGE':
         #     self.med = RGE(self.q, self.sigma, self.mu)
         
@@ -25,9 +27,9 @@ class Adapter():
         # batch_size = inputs.size()[0]
         
         # recon_pre = self.model(inputs)  # (batch_size, 10)
-        # loss_0 = criterion(recon_pre, targets)  # (batch_size )
-        # loss_0_mean = loss_0.mean()
-        # losses.update(loss_0_mean.item(), inputs.size(0))
+        loss_0 = self.criterion(inputs, targets)  # (batch_size )
+        loss_0_mean = loss_0.mean()
+        self.losses.update(loss_0_mean.item(), inputs.size(0))
         
         # if inputs.shape[0] != batch_size:
         #     return
