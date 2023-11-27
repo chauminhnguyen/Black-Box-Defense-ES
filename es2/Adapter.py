@@ -31,14 +31,14 @@ class Adapter():
         # batch_size = inputs.size()[0]
 
         with torch.no_grad():
-            original_pre = self.model(ori_inputs).detach().clone()
+            original_pre = self.model(ori_inputs).argmax(1).detach().clone()
             if self.decoder is None:
                 recon_pre = self.model(inputs)
             else:
                 recon_pre = self.model(self.decoder(inputs))
             
             # loss_0 = self.criterion(recon_pre, original_pre)
-            loss_0 = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')(recon_pre.float(), original_pre.long())
+            loss_0 = nn.CrossEntropyLoss()(recon_pre.float(), original_pre.long())
             # record original loss
             loss_0_mean = loss_0.mean()
             self.losses.update(loss_0_mean.item(), inputs.size(0))
@@ -53,9 +53,9 @@ class Adapter():
         # prev_grad = self.criterion(ori_inputs, inputs)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
-        # recon_flat = torch.flatten(inputs, start_dim=1).cuda()
-        # loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
-        return grad_est_no_grad
+        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+        loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
+        return loss
     
 
 class Adapter_RGE_CGE():
