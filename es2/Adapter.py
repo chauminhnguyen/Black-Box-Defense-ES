@@ -1,16 +1,20 @@
 from es2 import *
 import torch
+import torch.nn as nn
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Adapter():
-    def __init__(self, zo_method, subspace, criterion, losses, model) -> None:
+    def __init__(self, zo_method, subspace, criterion, losses, model, decoder=None) -> None:
         self.subspace = subspace
         self.mu = 0.005
         self.sigma = 0.01
         self.beta = 0.5
         self.criterion = criterion
         self.losses = losses
+        self.model = model
+        self.decoder = decoder
+        
         # self.zo_method = zo_method
         if zo_method =='GES':
             self.med = GES(self.subspace, self.sigma, self.beta, criterion)
@@ -23,13 +27,22 @@ class Adapter():
         # self.loss_fn = loss_fn
         # self.model = model
 
-    def run(self, inputs, targets):
+    def run(self, ori_inputs, inputs, targets):
         # batch_size = inputs.size()[0]
+
+        with torch.no_grad():
+            original_pre = self.model(ori_inputs).detach().clone()
+            if self.decoder is None:
+                recon_pre = self.model(inputs)
+            else:
+                recon_pre = self.model(self.decoder(inputs))
+            
+            # loss_0 = self.criterion(recon_pre, original_pre)
+            loss_0 = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')(recon_pre.float(), original_pre.long())
+            # record original loss
+            loss_0_mean = loss_0.mean()
+            self.losses.update(loss_0_mean.item(), inputs.size(0))
         
-        # recon_pre = self.model(inputs)  # (batch_size, 10)
-        loss_0 = self.criterion(inputs, targets)  # (batch_size )
-        loss_0_mean = loss_0.mean()
-        self.losses.update(loss_0_mean.item(), inputs.size(0))
         
         # if inputs.shape[0] != batch_size:
         #     return
@@ -37,11 +50,12 @@ class Adapter():
         # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
         # self.loss_fn.set_target(targets_)
         grad_est_no_grad = self.med.run(inputs, targets)
+        # prev_grad = self.criterion(ori_inputs, inputs)
 
         # reconstructed image * gradient estimation   <--   g(x) * a
-        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
-        loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
-        return loss
+        # recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+        # loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
+        return grad_est_no_grad
     
 
 class Adapter_RGE_CGE():

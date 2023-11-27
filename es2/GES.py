@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 class GES:
-    def __init__(self, subspace, sigma, beta, loss_fn):
+    def __init__(self, k, sigma, beta, loss_fn):
         '''
         q: number of samples
         sigma: noise scale
@@ -10,7 +10,7 @@ class GES:
         '''
         self.U = None
         self.surg_grads = []
-        self.k = subspace
+        self.k = k
         self.sigma = sigma
         self.beta = beta
         self.alpha = 1
@@ -69,7 +69,7 @@ class GES:
             g_hat = self.beta / (2 * self.sigma**2 * batch_size) * torch.sum(grad_ests, dim=0)
             # g_hat shape: (batch, k)
             
-            if self.cur_iter > self.k:
+            if len(self.surg_grads) >= self.k:
                 self.surg_grads.pop(0)
             self.surg_grads.append(g_hat)
 
