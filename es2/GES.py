@@ -18,6 +18,7 @@ class GES:
         self.remain = None
         self.cur_iter = 0
         self.P = 200
+        self.m, self.sigma = 0, 100  # mean and standard deviation
     
     def run(self, inputs, targets):
         # inputs shape: (batch, channel, h, w)
@@ -36,13 +37,27 @@ class GES:
         # for i in self.P:
         if self.cur_iter < self.k:
             # u_flat
-            noise.append(a * torch.rand(self.P, batch_size, n).cuda())
+            # noise.append(a * torch.rand(self.P, batch_size, n).cuda())
+            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
+            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
+            u = torch.div(u, u_norm).cuda()       # (batch_size, d)
+            noise.append(u)
             # self.alpha = 0.5
             self.cur_iter += 1
         else:
             self.alpha = 0.5
             self.U, _ = torch.linalg.qr(torch.stack(self.surg_grads).T)
-            noise.append(a * torch.rand(self.P, batch_size, n).cuda() + c * torch.rand(self.P, batch_size, self.k).cuda() @ self.U.T)
+            
+            u = torch.normal(self.m, self.sigma, size=(batch_size, n))
+            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
+            u_n = torch.div(u, u_norm).cuda()       # (batch_size, d)
+
+            u = torch.normal(self.m, self.sigma, size=(batch_size, self.k))
+            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, self.k)    # dim -- careful
+            u_k = torch.div(u, u_norm).cuda()       # (batch_size, d)
+
+            noise.append(a * u_n + c * u_k @ self.U.T)
+            # noise.append(a * torch.rand(self.P, batch_size, n).cuda() + c * torch.rand(self.P, batch_size, self.k).cuda() @ self.U.T)
         
         noise = torch.cat(noise)
         # noise shape: (P, batch, k)
@@ -73,7 +88,6 @@ class GES:
                 self.surg_grads.pop(0)
             self.surg_grads.append(g_hat)
 
-        
-        # g_hat_no_grad = g_hat.detach()
+        g_hat_no_grad = g_hat.detach()
 
-        return g_hat
+        return g_hat_no_grad

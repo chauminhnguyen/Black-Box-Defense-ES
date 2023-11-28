@@ -291,9 +291,9 @@ class Classification(BaseTask):
                     loss = self.es_adapter.run(inputs, recon, targets)
                 else:
                     loss = self.es_adapter.run(inputs, recon, targets)
-                    prev_loss = nn.MSELoss(size_average=None, reduce=None, reduction='none')(inputs, recon)
-                    loss = prev_loss.view(self.args.batch, -1) @ loss.unsqueeze(-1)
-                    loss = torch.sum(loss) / len(loss)
+                    # prev_loss = nn.MSELoss(size_average=None, reduce=None, reduction='none')(inputs, recon)
+                    # loss = prev_loss.view(self.args.batch, -1) @ loss.unsqueeze(-1)
+                    # loss = torch.sum(loss) / len(loss)
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()

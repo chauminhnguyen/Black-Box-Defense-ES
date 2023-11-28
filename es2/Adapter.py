@@ -38,7 +38,7 @@ class Adapter():
                 recon_pre = self.model(self.decoder(inputs))
             
             # loss_0 = self.criterion(recon_pre, original_pre)
-            loss_0 = nn.CrossEntropyLoss()(recon_pre.float(), original_pre.long())
+            loss_0 = nn.CrossEntropyLoss()(recon_pre, original_pre)
             # record original loss
             loss_0_mean = loss_0.mean()
             self.losses.update(loss_0_mean.item(), inputs.size(0))
