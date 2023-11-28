@@ -48,11 +48,11 @@ class GES:
             self.alpha = 0.5
             self.U, _ = torch.linalg.qr(torch.stack(self.surg_grads).T)
             
-            u = torch.normal(self.m, self.sigma, size=(batch_size, n))
+            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
             u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
             u_n = torch.div(u, u_norm).cuda()       # (batch_size, d)
 
-            u = torch.normal(self.m, self.sigma, size=(batch_size, self.k))
+            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, self.k))
             u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, self.k)    # dim -- careful
             u_k = torch.div(u, u_norm).cuda()       # (batch_size, d)
 
