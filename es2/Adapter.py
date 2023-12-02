@@ -44,16 +44,16 @@ class Adapter():
             self.losses.update(loss_0_mean.item(), inputs.size(0))
         
         
-        # if inputs.shape[0] != batch_size:
-        #     return
+            # if inputs.shape[0] != batch_size:
+            #     return
 
-        # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
-        # self.loss_fn.set_target(targets_)
-        grad_est_no_grad = self.med.run(inputs, targets)
-        # prev_grad = self.criterion(ori_inputs, inputs)
+            # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
+            # self.loss_fn.set_target(targets_)
+            grad_est_no_grad = self.med.run(inputs, targets)
+            # prev_grad = self.criterion(ori_inputs, inputs)
 
-        # reconstructed image * gradient estimation   <--   g(x) * a
-        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+            # reconstructed image * gradient estimation   <--   g(x) * a
+            recon_flat = torch.flatten(inputs, start_dim=1).cuda()
         loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
         return loss
     

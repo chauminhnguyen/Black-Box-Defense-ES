@@ -16,15 +16,24 @@ import torch.nn as nn
 class CELoss(nn.Module):
     def __init__(self):
         super(CELoss, self).__init__()
-        self.loss = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
+        # self.loss = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
+        # self.loss = 
     
     def forward(self, inputs, targets):
-        if len(targets.size()) == 1: # batch_size
-            targets = targets.unsqueeze(-1)
-        elif len(targets.size()) == 2: # batch_size, cls
-            targets = targets.argmax(1).unsqueeze(-1).long()
-        inputs = inputs.unsqueeze(-1).float()
-        return self.loss(inputs, targets)
+        # if len(targets.size()) == 1: # batch_size
+        #     targets = targets.unsqueeze(-1)
+        # elif len(targets.size()) == 2: # batch_size, cls
+        #     targets = targets.argmax(1).unsqueeze(-1).long()
+        # inputs = inputs.unsqueeze(-1).float()
+        # return self.loss(inputs, targets)
+        
+        acc = []
+        for input, terget in zip(inputs, targets):
+            acc1 = accuracy(inputs, targets, topk=(1,))
+            acc.append(torch.tensor(acc1))
+        acc = torch.stack(acc).cuda()
+        # print('===', acc.shape)
+        return acc
 
 
 class Classification(BaseTask):
