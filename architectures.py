@@ -14,7 +14,7 @@ from archs.stl_resnet import STL10_ResNet18
 from datasets import get_normalize_layer
 from torchvision.models.resnet import resnet18, resnet34, resnet50
 from archs.resnet import ResNet50, ResNet18
-from archs.basic_unet import UnetEncoder, UnetDecoder
+from archs.basic_unet import UnetEncoder, UnetDecoder, Unet_2Block, UnetDecoder_2Block, UnetEncoder_2Block
 from archs.unet import UNet
 #from archs.vrnet import VariationalNetwork
 
@@ -337,6 +337,15 @@ def get_architecture(arch: str, dataset: str, pytorch_pretrained: bool=False) ->
         return model
     elif arch == 'unet_decoder':
         model = UnetDecoder((1,3,256,256)).cuda()
+        return model
+    elif arch == 'unet_2block':
+        model = Unet_2Block(3)
+        return model
+    elif arch == 'unet_encoder_2block':
+        model = UnetEncoder_2Block(3).cuda()
+        return model
+    elif arch == 'unet_decoder_2block':
+        model = UnetDecoder_2Block((1,3,32,32)).cuda()
         return model
     else:
         raise Exception('Unknown architecture.')
