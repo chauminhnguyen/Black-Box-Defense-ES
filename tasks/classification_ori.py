@@ -25,7 +25,75 @@ class CELoss(nn.Module):
             targets = targets.argmax(1).unsqueeze(-1).long()
         inputs = inputs.unsqueeze(-1).float()
         return self.loss(inputs, targets)
+        
+        # acc = []
+        # for input, terget in zip(inputs, targets):
+        #     acc1 = accuracy(inputs, targets, topk=(1,))
+        #     acc.append(torch.tensor(acc1))
+        # acc = torch.stack(acc).cuda()
+        # # print('===', acc.shape)
+        # return acc
 
+class CS_Loss(nn.Module):
+    def __init__(self):
+        super(CELoss, self).__init__()
+        self.loss = nn.CosineSimilarity(dim=1, eps=1e-08)
+    
+    def forward(self, inputs, targets):
+        # if len(targets.size()) == 1: # batch_size
+        #     targets = targets.unsqueeze(-1)
+        # elif len(targets.size()) == 2: # batch_size, cls
+        #     targets = targets.argmax(1).unsqueeze(-1).long()
+        # inputs = inputs.unsqueeze(-1)
+        
+        # batch_size, cls
+        return self.loss(inputs, targets).mean()
+
+class MMD_loss(nn.Module):
+    def __init__(self, kernel_mul = 2.0, kernel_num = 5):
+        super(MMD_loss, self).__init__()
+        self.kernel_num = kernel_num
+        self.kernel_mul = kernel_mul
+        self.fix_sigma = None
+    def guassian_kernel(self, source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
+        n_samples = int(source.size()[0])+int(target.size()[0])
+        total = torch.cat([source, target], dim=0)
+        
+        total0 = total.unsqueeze(0).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
+        total1 = total.unsqueeze(1).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
+        L2_distance = ((total0-total1)**2).sum(2) 
+        if fix_sigma:
+            bandwidth = fix_sigma
+        else:
+            bandwidth = torch.sum(L2_distance.data) / (n_samples**2-n_samples)
+        bandwidth /= kernel_mul ** (kernel_num // 2)
+        bandwidth_list = [bandwidth * (kernel_mul**i) for i in range(kernel_num)]
+        kernel_val = [torch.exp(-L2_distance / bandwidth_temp) for bandwidth_temp in bandwidth_list]
+        return sum(kernel_val)
+    
+    def forward(self, source, target):
+        batch_size = int(source.size()[0])
+        kernels = self.guassian_kernel(source, target, kernel_mul=self.kernel_mul, kernel_num=self.kernel_num, fix_sigma=self.fix_sigma)
+        XX = kernels[:batch_size, :batch_size]
+        YY = kernels[batch_size:, batch_size:]
+        XY = kernels[:batch_size, batch_size:]
+        YX = kernels[batch_size:, :batch_size]
+        loss = torch.mean(XX + YY - XY -YX)
+        return loss
+
+
+class Cls_Loss(nn.Module):
+    def __init__(self, lambda_cs=0.5, lambda_mmd=0.5):
+        self.ce_loss = CELoss()
+        self.cs_loss = CS_Loss()
+        self.mmd_loss = MMD_loss()
+        self.lambda_cs = lambda_cs
+        self.lambda_mmd = lambda_mmd
+    
+    def forward(self, source, ori_source, target):
+        loss = self.ce_loss(source, target) + self.lambda_cs * self.cs_loss(source, ori_source) + \
+                self.lambda_mmd * self.mmd_loss(source, ori_source)
+        return loss
 
 class Classification(BaseTask):
     def __init__(self, args) -> None:
@@ -96,31 +164,6 @@ class Classification(BaseTask):
         # self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
         self.criterion = CELoss()
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
-
-        class loss_fn:
-            def __init__(self, criterion, classifier):
-                self.classifier = classifier
-                self.criterion = criterion
-            
-            # def set_target(self, targets):
-            #     self.targets = targets
-            
-            def __call__(self, inputs_q, targets):
-                inputs_q_pre = self.classifier(inputs_q)
-                loss = self.criterion(inputs_q_pre, targets)
-                return loss
-            
-        self.losses = AverageMeter()
-
-        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
-            self.es_adapter = Adapter_RGE_CGE(  zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=self.losses, \
-                                                decoder=self.decoder)
-        else:
-            # model = nn.Sequential(self.decoder, self.model)
-            self.es_adapter = Adapter(  zo_method=self.args.zo_method, subspace=self.args.q, \
-                                        criterion=self.criterion, \
-                                        losses=self.losses, model=self.model, decoder=self.decoder)
-            
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
             
@@ -160,6 +203,7 @@ class Classification(BaseTask):
 
         batch_time = AverageMeter()
         data_time = AverageMeter()
+        losses = AverageMeter()
         end = time.time()
 
         # switch to train mode
@@ -176,6 +220,26 @@ class Classification(BaseTask):
             self.decoder.train()
 
         self.model.eval()
+
+        class loss_fn:
+            def __init__(self, criterion, classifier):
+                self.classifier = classifier
+                self.criterion = criterion
+            
+            def set_ori(self, ori_inputs):
+                self.ori_recon = self.classifier(ori_inputs)
+            
+            def __call__(self, inputs_q, targets):
+                recon_q = self.classifier(inputs_q)
+                loss = self.criterion(recon_q, self.ori_recon, targets)
+                return loss
+
+        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
+        else:
+            model = nn.Sequential(self.decoder, self.model)
+            self.loss_fn = loss_fn(self.criterion, model)
+            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=self.loss_fn, losses=losses, model=self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -192,13 +256,15 @@ class Classification(BaseTask):
             recon = self.denoiser(inputs + noise)
             recon = self.encoder(recon)
 
+            if not 'RGE' in self.args.zo_method and not 'CGE' in self.args.zo_method:
+                self.loss_fn.set_ori(inputs)
+
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
                 recon = self.model(recon)
-                # loss = self.criterion(recon, targets)
-                loss = nn.CrossEntropyLoss()(recon, targets)
+                loss = self.criterion(recon, targets)
                 # record loss
-                self.losses.update(loss.item(), inputs.size(0))
+                losses.update(loss.item(), inputs.size(0))
 
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
@@ -224,8 +290,8 @@ class Classification(BaseTask):
                     'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
                     epoch, i, len(self.train_loader), batch_time=batch_time,
-                    data_time=data_time, loss=self.losses))
-        return self.losses.avg
+                    data_time=data_time, loss=losses))
+        return losses.avg
     
     def train_denoiser(self, epoch):
         """
@@ -243,12 +309,32 @@ class Classification(BaseTask):
         print("Training model for classification task.")
         batch_time = AverageMeter()
         data_time = AverageMeter()
+        losses = AverageMeter()
         end = time.time()
 
         # switch to train mode
         self.denoiser.train()
         self.model.eval()
 
+        class loss_fn:
+            def __init__(self, criterion, classifier):
+                self.classifier = classifier
+                self.criterion = criterion
+            
+            # def set_target(self, targets):
+            #     self.targets = targets
+            
+            def __call__(self, inputs_q, targets):
+                inputs_q_pre = self.classifier(inputs_q)
+                loss = self.criterion(inputs_q_pre, targets)
+                return loss
+
+        if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
+            self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses)
+        else:
+            # self.es_adapter = Adapter(self.args.zo_method, self.args.q, loss_fn(self.criterion, self.model), self.model)
+            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=loss_fn(self.criterion, self.model), losses=losses, model=self.model)
+        
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
             data_time.update(time.time() - end)
@@ -267,7 +353,7 @@ class Classification(BaseTask):
                 recon = self.model(recon)
                 loss = self.criterion(recon, targets)
                 # record loss
-                self.losses.update(loss.item(), inputs.size(0))
+                losses.update(loss.item(), inputs.size(0))
 
             elif self.args.optimization_method == 'ZO':
                 recon.requires_grad_(True)
@@ -297,8 +383,8 @@ class Classification(BaseTask):
                     'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(
                     epoch, i, len(self.train_loader), batch_time=batch_time,
-                    data_time=data_time, loss=self.losses))
-        return self.losses.avg
+                    data_time=data_time, loss=losses))
+        return losses.avg
     
     def eval(self, loader):
         """
@@ -336,7 +422,7 @@ class Classification(BaseTask):
                 targets = targets.cuda()
 
                 # augment inputs with noise
-                inputs = inputs +- torch.randn_like(inputs, device='cuda') * self.args.noise_sd
+                inputs = inputs + torch.randn_like(inputs, device='cuda') * self.args.noise_sd
 
                 if self.denoiser is not None:
                     inputs = self.denoiser(inputs)

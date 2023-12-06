@@ -17,10 +17,10 @@ class Adapter():
         
         # self.zo_method = zo_method
         if zo_method =='GES':
-            self.med = GES(self.subspace, self.sigma, self.beta, criterion)
+            self.med = GES(self.subspace, self.sigma, self.beta, criterion, model, decoder)
         elif zo_method =='SGES':
             # self.med = SGES(self.q, self.sigma, self.mu, True)
-            self.med = SGES(self.subspace, self.sigma, self.beta, criterion, True)
+            self.med = SGES(self.subspace, self.sigma, self.beta, criterion, True, model, decoder)
         # elif zo_method =='RGE':
         #     self.med = RGE(self.q, self.sigma, self.mu)
         
@@ -49,12 +49,14 @@ class Adapter():
 
             # targets_ = targets.view(batch_size, 1).repeat(1, self.q).view(batch_size * self.q)
             # self.loss_fn.set_target(targets_)
-            grad_est_no_grad = self.med.run(inputs, targets)
+            grad_est = self.med.run(inputs, targets)
             # prev_grad = self.criterion(ori_inputs, inputs)
 
             # reconstructed image * gradient estimation   <--   g(x) * a
-            recon_flat = torch.flatten(inputs, start_dim=1).cuda()
-        loss = torch.sum(recon_flat @ grad_est_no_grad, dim=-1).mean()  # l_mean
+            
+        grad_est_no_grad = grad_est.detach()
+        recon_flat = torch.flatten(inputs, start_dim=1).cuda()
+        loss = torch.sum(recon_flat * grad_est_no_grad, dim=-1).mean()  # l_mean
         return loss
     
 
@@ -95,7 +97,7 @@ class Adapter_RGE_CGE():
 
                 # record original loss
                 loss_0_mean = loss_0.mean()
-                # self.losses.update(loss_0_mean.item(), inputs.size(0))
+                self.losses.update(loss_0_mean.item(), inputs.size(0))
 
                 recon_flat_no_grad = torch.flatten(inputs, start_dim=1).to(DEVICE)
                 grad_est = torch.zeros(batch_size, d).to(DEVICE)

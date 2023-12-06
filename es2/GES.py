@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 class GES:
-    def __init__(self, k, sigma, beta, loss_fn):
+    def __init__(self, k, sigma, beta, loss_fn, model, decoder=None):
         '''
         q: number of samples
         sigma: noise scale
@@ -10,15 +10,17 @@ class GES:
         '''
         self.U = None
         self.surg_grads = []
-        self.k = k
+        self.k = 100
         self.sigma = sigma
         self.beta = beta
         self.alpha = 1
         self.loss_fn = loss_fn
         self.remain = None
         self.cur_iter = 0
-        self.P = 200
+        self.P = k
         self.m, self.sigma = 0, 100  # mean and standard deviation
+        self.model = model
+        self.decoder = decoder
     
     def run(self, inputs, targets):
         # inputs shape: (batch, channel, h, w)
@@ -36,11 +38,13 @@ class GES:
         noise = []
         # for i in self.P:
         if self.cur_iter < self.k:
-            # u_flat
-            # noise.append(a * torch.rand(self.P, batch_size, n).cuda())
-            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
-            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
-            u = torch.div(u, u_norm).cuda()       # (batch_size, d)
+            # u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
+            # u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
+            # u = torch.div(u, u_norm).cuda()       # (batch_size, d)
+            u = torch.zeros(self.P, batch_size, n).cuda()
+            for i in range(self.P):
+                u[i, :, i] = 1
+
             noise.append(u)
             # self.alpha = 0.5
             self.cur_iter += 1
@@ -48,13 +52,21 @@ class GES:
             self.alpha = 0.5
             self.U, _ = torch.linalg.qr(torch.stack(self.surg_grads).T)
             
-            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
-            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
-            u_n = torch.div(u, u_norm).cuda()       # (batch_size, d)
+            # u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, n))
+            # u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, n)    # dim -- careful
+            # u_n = torch.div(u, u_norm).cuda()       # (batch_size, d)
 
-            u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, self.k))
-            u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, self.k)    # dim -- careful
-            u_k = torch.div(u, u_norm).cuda()       # (batch_size, d)
+            # u = torch.normal(self.m, self.sigma, size=(self.P, batch_size, self.k))
+            # u_norm = torch.norm(u, p=2, dim=2).reshape(self.P, batch_size, 1).expand(self.P, batch_size, self.k)    # dim -- careful
+            # u_k = torch.div(u, u_norm).cuda()       # (batch_size, d)
+
+            u_n = torch.zeros(self.P, batch_size, n).cuda()
+            for i in range(self.P):
+                u_n[i, :, i] = 1
+            
+            u_k = torch.zeros(self.P, batch_size, self.k).cuda()
+            for i in range(self.k):
+                u_k[i, :, i] = 1
 
             noise.append(a * u_n + c * u_k @ self.U.T)
             # noise.append(a * torch.rand(self.P, batch_size, n).cuda() + c * torch.rand(self.P, batch_size, self.k).cuda() @ self.U.T)
@@ -68,13 +80,20 @@ class GES:
 
         with torch.no_grad():
             # input shape (P - repeat, batch, channel, h, w) +/- noise shape (P, batch, channel, h, w)
-            input_q_plus_arr = inputs.repeat(self.P, 1, 1, 1, 1) + u
-            input_q_minus_arr = inputs.repeat(self.P, 1, 1, 1, 1) - u
+            input_q_plus_arr = inputs.repeat(self.P, 1, 1, 1, 1) + 0.005 * u
+            input_q_minus_arr = inputs.repeat(self.P, 1, 1, 1, 1) - 0.005 * u
             
             loss_diff = []
             for input_q_plus, input_q_minus in zip(input_q_plus_arr, input_q_minus_arr):
-                loss_tmp_plus = self.loss_fn(input_q_plus, targets)
-                loss_tmp_minus = self.loss_fn(input_q_minus, targets)
+                if self.decoder is None:
+                    recon_q_pre_plus = self.model(input_q_plus)
+                    recon_q_pre_minus = self.model(input_q_minus)
+                else:
+                    recon_q_pre_plus = self.model(self.decoder(input_q_plus))
+                    recon_q_pre_minus = self.model(self.decoder(input_q_minus))
+                
+                loss_tmp_plus = self.loss_fn(recon_q_pre_plus, targets)
+                loss_tmp_minus = self.loss_fn(recon_q_pre_minus, targets)
                 # loss_tmp_plus and loss_tmp_minus shape: (P, batch, 1)
                 loss_diff.extend(loss_tmp_plus - loss_tmp_minus)
                 # loss_diff shape: (P, batch, 1)
@@ -88,6 +107,4 @@ class GES:
                 self.surg_grads.pop(0)
             self.surg_grads.append(g_hat)
 
-        g_hat_no_grad = g_hat.detach()
-
-        return g_hat_no_grad
+        return g_hat

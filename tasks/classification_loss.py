@@ -11,31 +11,89 @@ from es2.Adapter import Adapter, Adapter_RGE_CGE
 from tqdm import tqdm
 import os
 import torch.nn as nn
-from archs.visualPrompt import VisualPrompt 
 
 
 class CELoss(nn.Module):
     def __init__(self):
         super(CELoss, self).__init__()
-        # self.loss = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
-        # self.loss = 
+        self.loss = nn.CrossEntropyLoss(size_average=None, reduce=False, reduction='none')
+    
+    def forward(self, inputs, targets):
+        if len(targets.size()) == 1: # batch_size
+            targets = targets.unsqueeze(-1)
+        elif len(targets.size()) == 2: # batch_size, cls
+            targets = targets.argmax(1).unsqueeze(-1).long()
+        inputs = inputs.unsqueeze(-1).float()
+        return self.loss(inputs, targets)
+        
+        # acc = []
+        # for input, terget in zip(inputs, targets):
+        #     acc1 = accuracy(inputs, targets, topk=(1,))
+        #     acc.append(torch.tensor(acc1))
+        # acc = torch.stack(acc).cuda()
+        # # print('===', acc.shape)
+        # return acc
+
+class CS_Loss(nn.Module):
+    def __init__(self):
+        super(CELoss, self).__init__()
+        self.loss = nn.CosineSimilarity(dim=1, eps=1e-08)
     
     def forward(self, inputs, targets):
         # if len(targets.size()) == 1: # batch_size
         #     targets = targets.unsqueeze(-1)
         # elif len(targets.size()) == 2: # batch_size, cls
         #     targets = targets.argmax(1).unsqueeze(-1).long()
-        # inputs = inputs.unsqueeze(-1).float()
-        # return self.loss(inputs, targets)
+        # inputs = inputs.unsqueeze(-1)
         
-        acc = []
-        for input, terget in zip(inputs, targets):
-            acc1 = accuracy(inputs, targets, topk=(1,))
-            acc.append(torch.tensor(acc1))
-        acc = torch.stack(acc).cuda()
-        # print('===', acc.shape)
-        return acc
+        # batch_size, cls
+        return self.loss(inputs, targets).mean()
 
+class MMD_loss(nn.Module):
+    def __init__(self, kernel_mul = 2.0, kernel_num = 5):
+        super(MMD_loss, self).__init__()
+        self.kernel_num = kernel_num
+        self.kernel_mul = kernel_mul
+        self.fix_sigma = None
+    def guassian_kernel(self, source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
+        n_samples = int(source.size()[0])+int(target.size()[0])
+        total = torch.cat([source, target], dim=0)
+        
+        total0 = total.unsqueeze(0).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
+        total1 = total.unsqueeze(1).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
+        L2_distance = ((total0-total1)**2).sum(2) 
+        if fix_sigma:
+            bandwidth = fix_sigma
+        else:
+            bandwidth = torch.sum(L2_distance.data) / (n_samples**2-n_samples)
+        bandwidth /= kernel_mul ** (kernel_num // 2)
+        bandwidth_list = [bandwidth * (kernel_mul**i) for i in range(kernel_num)]
+        kernel_val = [torch.exp(-L2_distance / bandwidth_temp) for bandwidth_temp in bandwidth_list]
+        return sum(kernel_val)
+    
+    def forward(self, source, target):
+        batch_size = int(source.size()[0])
+        kernels = self.guassian_kernel(source, target, kernel_mul=self.kernel_mul, kernel_num=self.kernel_num, fix_sigma=self.fix_sigma)
+        XX = kernels[:batch_size, :batch_size]
+        YY = kernels[batch_size:, batch_size:]
+        XY = kernels[:batch_size, batch_size:]
+        YX = kernels[batch_size:, :batch_size]
+        loss = torch.mean(XX + YY - XY -YX)
+        return loss
+
+
+class Cls_Loss(nn.Module):
+    def __init__(self, lambda_cs=0.5, lambda_mmd=0.5):
+        self.ce_loss = CELoss()
+        self.cs_loss = CS_Loss()
+        self.mmd_loss = MMD_loss()
+        self.lambda_cs = lambda_cs
+        self.lambda_mmd = lambda_mmd
+    
+    def forward(self, source, ori_source, target):
+        loss = self.ce_loss(source, target) + self.lambda_cs * self.cs_loss(source, ori_source) + \
+                self.lambda_mmd * self.mmd_loss(source, ori_source)
+        return loss
 
 class Classification(BaseTask):
     def __init__(self, args) -> None:
@@ -43,7 +101,6 @@ class Classification(BaseTask):
         self.args = args
         self.load_data(args.dataset, args.batch, args.workers)
         self.build_model(self.args)
-        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
     def load_data(self, dataset_name, batch_size, num_workers):
         print("Load dataset for classification task")
@@ -58,10 +115,13 @@ class Classification(BaseTask):
     def build_model(self, args):
         print("Building model for classification task")
         
-        self.denoiser = VisualPrompt((3,32,32), args.shape, args.size, len(train_data.classes) if args.classwise else 1, args.clip).to(self.device)
         if args.pretrained_denoiser:
             checkpoint = torch.load(args.pretrained_denoiser)
+            assert checkpoint['arch'] == args.arch
+            self.denoiser = get_architecture(checkpoint['arch'], args.dataset)
             self.denoiser.load_state_dict(checkpoint['state_dict'])
+        else:
+            self.denoiser = get_architecture(args.arch, args.dataset)
 
         if args.model_type == 'AE_DS':
             if args.pretrained_encoder:
@@ -166,19 +226,20 @@ class Classification(BaseTask):
                 self.classifier = classifier
                 self.criterion = criterion
             
-            # def set_target(self, targets):
-            #     self.targets = targets
+            def set_ori(self, ori_inputs):
+                self.ori_recon = self.classifier(ori_inputs)
             
             def __call__(self, inputs_q, targets):
-                inputs_q_pre = self.classifier(inputs_q)
-                loss = self.criterion(inputs_q_pre, targets)
+                recon_q = self.classifier(inputs_q)
+                loss = self.criterion(recon_q, self.ori_recon, targets)
                 return loss
 
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
             model = nn.Sequential(self.decoder, self.model)
-            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=loss_fn(self.criterion, model), losses=losses, model=self.model)
+            self.loss_fn = loss_fn(self.criterion, model)
+            self.es_adapter = Adapter(zo_method=self.args.zo_method, subspace=self.args.q, criterion=self.loss_fn, losses=losses, model=self.model)
         
         for i, (inputs, targets) in enumerate(self.train_loader):
             # measure data loading time
@@ -194,6 +255,9 @@ class Classification(BaseTask):
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
             recon = self.denoiser(inputs + noise)
             recon = self.encoder(recon)
+
+            if not 'RGE' in self.args.zo_method and not 'CGE' in self.args.zo_method:
+                self.loss_fn.set_ori(inputs)
 
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
