@@ -19,9 +19,9 @@ import copy
 import json
 from torchvision.transforms import ToTensor
 
-from mmseg.datasets import CityscapesDataset
-from mmengine.registry import init_default_scope
-init_default_scope('mmseg')
+# from mmseg.datasets import CityscapesDataset
+# from mmengine.registry import init_default_scope
+# init_default_scope('mmseg')
 
 
 
