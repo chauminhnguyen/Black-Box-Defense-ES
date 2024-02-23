@@ -133,10 +133,12 @@ class UnetDecoder(nn.Module):
 
 class Unet_2Block(nn.Module):
     def __init__(self,input_channel, retain_size=None):
-        self.encoder = UnetEncoder_2Block(input_channel)
-        self.decoder = UnetDecoder_2Block(retain_size)
+        super(Unet_2Block,self).__init__()
+        self.encoder = UnetEncoder_2Block(input_channel).cuda()
+        self.decoder = UnetDecoder_2Block(retain_size).cuda()
     
     def forward(self,x):
+        x = x.cuda()
         out = self.encoder(x, self.decoder)
         out = self.decoder(out)
         return out
@@ -144,7 +146,7 @@ class Unet_2Block(nn.Module):
 
 class UnetEncoder_2Block(nn.Module):
     def __init__(self,input_channel):
-        super(UnetEncoder,self).__init__()
+        super(UnetEncoder_2Block,self).__init__()
         self.conv1 = Convblock(input_channel,32,padding=0)
         self.conv2 = Convblock(32,64,padding=0)
         self.neck = Convblock(64,128,padding=0)
@@ -152,7 +154,6 @@ class UnetEncoder_2Block(nn.Module):
     def forward(self,x, decoder=None):
 
         # Encoder Network
-
         # Conv down 1
         conv1 = self.conv1(x)
         pool1 = F.max_pool2d(conv1,kernel_size=2)
@@ -171,7 +172,7 @@ class UnetEncoder_2Block(nn.Module):
 
 class UnetDecoder_2Block(nn.Module):
     def __init__(self,retain_size=None):
-        super(UnetDecoder,self).__init__()
+        super(UnetDecoder_2Block,self).__init__()
         self.upconv2 = nn.ConvTranspose2d(128,64,3,2,0,1)
         self.dconv2 = Convblock(128,64)
         self.upconv1 = nn.ConvTranspose2d(64,32,3,2,0,1)

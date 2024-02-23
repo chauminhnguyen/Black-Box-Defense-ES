@@ -85,15 +85,15 @@ class Adapter_RGE_CGE():
                 q = torch.tensor(self.q).to(DEVICE)
 
                 # Forward Inference (Original)
-                # original_pre = self.model(ori_inputs).argmax(1).detach().clone()
-                original_pre = self.model(ori_inputs).detach().clone()
+                original_pre = self.model(ori_inputs).argmax(1).detach().clone()
+                # original_pre = self.model(ori_inputs).detach().clone()
 
                 if self.decoder is None:
                     recon_pre = self.model(inputs)
                 else:
                     recon_pre = self.model(self.decoder(inputs))
                 
-                loss_0 = self.criterion(recon_pre, original_pre)
+                loss_0 = nn.CrossEntropyLoss()(recon_pre, original_pre)
 
                 # record original loss
                 loss_0_mean = loss_0.mean()

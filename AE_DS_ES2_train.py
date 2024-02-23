@@ -67,9 +67,9 @@ parser.add_argument('--mu', default=0.005, type=float, metavar='N',
 parser.add_argument('--model_type', default='AE_DS', type=str,
                     help="Denoiser + (AutoEncoder) + classifier/reconstructor",
                     choices=['DS', 'AE_DS'])
-parser.add_argument('--arch', type=str, choices=DENOISERS_ARCHITECTURES)
-parser.add_argument('--encoder_arch', type=str, default='cifar_encoder', choices=AUTOENCODER_ARCHITECTURES)
-parser.add_argument('--decoder_arch', type=str, default='cifar_decoder', choices=AUTOENCODER_ARCHITECTURES)
+parser.add_argument('--arch', type=str)
+parser.add_argument('--encoder_arch', type=str, default='cifar_encoder')
+parser.add_argument('--decoder_arch', type=str, default='cifar_decoder')
 parser.add_argument('--classifier', default='', type=str,
                     help='path to the classifier used with the `classificaiton`'
                          'or `stability` objectives of the denoiser.')

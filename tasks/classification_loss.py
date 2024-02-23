@@ -36,7 +36,7 @@ class CELoss(nn.Module):
 
 class CS_Loss(nn.Module):
     def __init__(self):
-        super(CELoss, self).__init__()
+        super(CS_Loss, self).__init__()
         self.loss = nn.CosineSimilarity(dim=1, eps=1e-08)
     
     def forward(self, inputs, targets):
@@ -84,6 +84,7 @@ class MMD_loss(nn.Module):
 
 class Cls_Loss(nn.Module):
     def __init__(self, lambda_cs=0.5, lambda_mmd=0.5):
+        super(Cls_Loss, self).__init__()
         self.ce_loss = CELoss()
         self.cs_loss = CS_Loss()
         self.mmd_loss = MMD_loss()
@@ -94,6 +95,11 @@ class Cls_Loss(nn.Module):
         loss = self.ce_loss(source, target) + self.lambda_cs * self.cs_loss(source, ori_source) + \
                 self.lambda_mmd * self.mmd_loss(source, ori_source)
         return loss
+    
+class scst_loss(nn.Module):
+    def __init__(self):
+        super(scst_loss, self).__init__()
+        
 
 class Classification(BaseTask):
     def __init__(self, args) -> None:
@@ -162,7 +168,7 @@ class Classification(BaseTask):
             self.optimizer = build_opt(self.args.optimizer, self.denoiser)
 
         # self.criterion = CrossEntropyLoss(size_average=None, reduce=False, reduction='none').cuda()
-        self.criterion = CELoss()
+        
         scheduler = StepLR(self.optimizer, step_size=self.args.lr_step_size, gamma=self.args.gamma)
         for epoch in range(starting_epoch, self.args.epochs):
             before = time.time()
@@ -230,10 +236,11 @@ class Classification(BaseTask):
                 self.ori_recon = self.classifier(ori_inputs)
             
             def __call__(self, inputs_q, targets):
-                recon_q = self.classifier(inputs_q)
-                loss = self.criterion(recon_q, self.ori_recon, targets)
+                # recon_q = self.classifier(inputs_q)
+                loss = self.criterion(inputs_q, self.ori_recon, targets)
                 return loss
-
+        
+        self.criterion = loss_fn(Cls_Loss(), self.model)
         if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
             self.es_adapter = Adapter_RGE_CGE(zo_method=self.args.zo_method, q=self.args.q, criterion=self.criterion, model=self.model, losses=losses, decoder=self.decoder)
         else:
@@ -256,8 +263,8 @@ class Classification(BaseTask):
             recon = self.denoiser(inputs + noise)
             recon = self.encoder(recon)
 
-            if not 'RGE' in self.args.zo_method and not 'CGE' in self.args.zo_method:
-                self.loss_fn.set_ori(inputs)
+            # if not 'RGE' in self.args.zo_method and not 'CGE' in self.args.zo_method:
+            self.criterion.set_ori(inputs)
 
             if self.args.optimization_method == 'FO':
                 recon = self.decoder(recon)
@@ -432,7 +439,7 @@ class Classification(BaseTask):
                     
                 # compute output
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
+                loss = nn.CrossEntropyLoss()(outputs, targets)
                 loss_mean = loss.mean()
 
                 # measure accuracy and record loss
