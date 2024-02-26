@@ -53,7 +53,7 @@ parser.add_argument('--measurement', default=576, type=int, metavar='N', help='t
 # Optimization Method
 parser.add_argument('--optimization_method', default='FO', type=str,
                     help="FO: First-Order (White-Box), ZO: Zeroth-Order (Black-box)",
-                    choices=['FO', 'ZO'])
+                    choices=['Only Denosise', 'FO', 'ZO'])
 parser.add_argument('--zo_method', default='RGE', type=str,
                     help="Random Gradient Estimation: RGE, Coordinate-Wise Gradient Estimation: CGE",
                     choices=['RGE', 'CGE', 'CGE_sim', 'GES', 'SGES'])

@@ -259,12 +259,17 @@ class Classification(BaseTask):
 
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
             recon = self.denoiser(inputs + noise)
-            recon = self.encoder(recon)
 
             if not 'RGE' in self.args.zo_method and not 'CGE' in self.args.zo_method:
                 self.loss_fn.set_ori(inputs)
 
-            if self.args.optimization_method == 'FO':
+            if self.args.optimization_method == 'Only Denosise':
+                loss = self.criterion(recon, inputs)
+                # record loss
+                losses.update(loss.item(), inputs.size(0))
+
+            elif self.args.optimization_method == 'FO':
+                recon = self.encoder(recon)
                 recon = self.decoder(recon)
                 # recon = self.model(recon)
                 # print('===', recon.shape, inputs.shape)
@@ -273,6 +278,7 @@ class Classification(BaseTask):
                 losses.update(loss.item(), inputs.size(0))
 
             elif self.args.optimization_method == 'ZO':
+                recon = self.encoder(recon)
                 recon.requires_grad_(True)
                 recon.retain_grad()
                 if 'RGE' in self.args.zo_method or 'CGE' in self.args.zo_method:
@@ -355,7 +361,7 @@ class Classification(BaseTask):
             noise = torch.randn_like(inputs, device='cuda') * self.args.noise_sd
             recon = self.denoiser(inputs + noise)
 
-            if self.args.optimization_method == 'FO':
+            if self.args.optimization_method == 'FO' or self.args.optimization_method == 'Only Denosise':
                 recon = self.model(recon)
                 loss = self.criterion(recon, targets)
                 # record loss
